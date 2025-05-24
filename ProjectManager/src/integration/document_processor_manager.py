@@ -2,16 +2,12 @@
 
 import customtkinter as ctk
 import tkinter as tk
-from tkinter import messagebox
-import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from CreateProjectList.gui.main_window.document_processor_gui import DocumentProcessorGUI
-from CreateProjectList.utils.config_manager import ConfigManager
-from CreateProjectList.utils.log_manager import LogManager
-from .config_resolver import ConfigResolver
-from .error_handler import IntegrationErrorHandler
+from ProjectManager.src.core.log_manager import get_logger
+from ProjectManager.src.core.path_manager import PathManager
+from ProjectManager.src.core.error_handler import ErrorHandler
 
 class DocumentProcessorManager:
     """ドキュメント処理機能の統合管理クラス"""
@@ -26,9 +22,9 @@ class DocumentProcessorManager:
         self.main_config = main_config
         self.doc_processor_window = None
         self.doc_processor_gui = None
-        self.config_manager = None
-        self.logger = LogManager().get_logger(__name__)
-        self.error_handler = IntegrationErrorHandler()
+        self.logger = get_logger(__name__)
+        self.path_manager = PathManager()
+        self.error_handler = ErrorHandler()
         
         # 設定の初期化
         self.initialize()
@@ -37,26 +33,61 @@ class DocumentProcessorManager:
         """初期化処理"""
         try:
             # パスの解決
-            integration_paths = ConfigResolver.resolve_integration_paths(self.main_config)
+            integration_paths = self._resolve_integration_paths()
             
-            # パスの妥当性確認
-            if not ConfigResolver.validate_paths(integration_paths):
-                raise ValueError("必要なディレクトリが存在しません")
-            
-            # CreateProjectListの設定初期化
-            self.config_manager = ConfigManager()
-            self.config_manager.initialize_with_parent_config({
-                'paths': integration_paths,
-                'main_config': self.main_config
-            })
-            
-            self.logger.info("DocumentProcessorManager initialized successfully")
-            
+            # CreateProjectListが利用可能か確認
+            try:
+                # インポートをここで試みる
+                from CreateProjectList.gui.main_window.document_processor_gui import DocumentProcessorGUI
+                from CreateProjectList.utils.config_manager import ConfigManager
+                from CreateProjectList.utils.log_manager import LogManager
+                
+                # ConfigManagerの初期化
+                self.config_manager = ConfigManager()
+                self.config_manager.initialize_with_parent_config({
+                    'paths': integration_paths,
+                    'main_config': self.main_config
+                })
+                
+                self.logger.info("DocumentProcessorManager initialized successfully")
+                
+            except ImportError as e:
+                self.logger.warning(f"CreateProjectList モジュールが見つかりません: {e}")
+                
         except Exception as e:
-            self.logger.error(f"初期化エラー: {e}")
-            raise
+            self.error_handler.handle_error(e, "初期化エラー")
+    
+    def _resolve_integration_paths(self) -> Dict[str, str]:
+        """
+        統合機能用のパス解決
+        
+        Returns:
+            Dict[str, str]: 解決されたパス情報
+        """
+        # 基本パスを取得
+        template_dir = self.path_manager.get_path("TEMPLATES_DIR")
+        output_dir = self.path_manager.get_path("OUTPUT_BASE_DIR")
+        temp_dir = self.path_manager.get_path("TEMP_DIR")
+        master_dir = self.path_manager.get_path("MASTER_DIR")
+        export_dir = self.path_manager.get_path("EXPORTS_DIR")
+        
+        # パスの設定
+        paths = {
+            'template_dir': str(template_dir),
+            'output_dir': str(output_dir),
+            'temp_dir': str(temp_dir),
+            'master_dir': str(master_dir),
+            'export_dir': str(export_dir)
+        }
+        
+        # 各ディレクトリを確保
+        for path_name, path_str in paths.items():
+            self.path_manager.ensure_directory(path_str)
+        
+        self.logger.info(f"パス解決完了: {paths}")
+        return paths
 
-    def create_window(self, parent: tk.Widget, project_data: Optional[Dict[str, Any]] = None) -> DocumentProcessorGUI:
+    def create_window(self, parent: tk.Widget, project_data: Optional[Dict[str, Any]] = None) -> Optional[Any]:
         """
         ドキュメント処理ウィンドウの作成
         
@@ -65,21 +96,41 @@ class DocumentProcessorManager:
             project_data: プロジェクトデータ（オプション）
             
         Returns:
-            DocumentProcessorGUI: 作成されたGUIインスタンス
+            Optional[Any]: 作成されたGUIインスタンス
         """
         try:
+            try:
+                # CreateProjectListモジュールをインポート
+                from CreateProjectList.gui.main_window.document_processor_gui import DocumentProcessorGUI
+            except ImportError:
+                self.error_handler.show_error_dialog(
+                    "機能エラー",
+                    "ドキュメント処理機能が利用できません。\n"
+                    "CreateProjectListモジュールがインストールされていることを確認してください。",
+                    parent
+                )
+                return None
+            
             # 既存のウィンドウがある場合はクリーンアップ
             if hasattr(self, 'doc_processor_window') and self.doc_processor_window:
                 self.cleanup()
 
             # プロジェクトデータの確認
             if not project_data:
-                messagebox.showwarning("警告", "プロジェクトを選択してください。")
+                self.error_handler.show_warning_dialog(
+                    "警告",
+                    "プロジェクトを選択してください。",
+                    parent
+                )
                 return None
 
             # プロジェクトパスの確認
             if not project_data.get('project_path'):
-                messagebox.showerror("エラー", "プロジェクトフォルダが設定されていません。")
+                self.error_handler.show_error_dialog(
+                    "エラー",
+                    "プロジェクトフォルダが設定されていません。",
+                    parent
+                )
                 return None
 
             project_path = Path(project_data['project_path'])
@@ -89,7 +140,11 @@ class DocumentProcessorManager:
                     project_path.mkdir(parents=True, exist_ok=True)
                     self.logger.info(f"プロジェクトフォルダを作成しました: {project_path}")
                 except Exception as e:
-                    messagebox.showerror("エラー", f"プロジェクトフォルダが存在せず、作成に失敗しました: {e}")
+                    self.error_handler.show_error_dialog(
+                        "エラー",
+                        f"プロジェクトフォルダが存在せず、作成に失敗しました: {e}",
+                        parent
+                    )
                     return None
 
             # 新しいウィンドウの作成
@@ -128,14 +183,8 @@ class DocumentProcessorManager:
             return self.doc_processor_gui
                 
         except Exception as e:
-            self.logger.error(f"ドキュメント処理ウィンドウの作成エラー: {e}")
-            if hasattr(self, 'error_handler'):
-                self.error_handler.handle_error(
-                    e,
-                    window=getattr(self, 'doc_processor_window', None),
-                    cleanup_func=self.cleanup
-                )
-            raise
+            self.error_handler.handle_error(e, "機能エラー", parent)
+            return None
 
     def set_project_data(self, project_data: Dict[str, Any]) -> None:
         """
@@ -151,7 +200,7 @@ class DocumentProcessorManager:
                 self.logger.warning("GUIが初期化されていません")
                 
         except Exception as e:
-            self.error_handler.handle_error(e, window=self.doc_processor_window)
+            self.error_handler.handle_error(e, "設定エラー", self.doc_processor_window)
 
     def on_closing(self) -> None:
         """ウィンドウが閉じられる時の処理"""
@@ -169,7 +218,10 @@ class DocumentProcessorManager:
         """リソースのクリーンアップ"""
         try:
             if self.doc_processor_gui:
-                self.doc_processor_gui.cleanup()
+                try:
+                    self.doc_processor_gui.cleanup()
+                except:
+                    pass
                 self.doc_processor_gui = None
                 
             self.logger.info("DocumentProcessorManager cleanup completed")

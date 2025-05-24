@@ -1,4 +1,4 @@
-"""統合設定管理クラス"""
+"""設定管理を一元化するモジュール"""
 
 import json
 import logging
@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import os
+
+from ProjectManager.src.core.path_manager import PathManager
 
 # デフォルト設定ファイルの初期内容
 DEFAULT_SETTINGS_CONTENT = """default_project_name=新規プロジェクト
@@ -18,7 +20,7 @@ default_process=P001
 default_line=L001"""
 
 class ConfigManager:
-    """統合設定管理クラス"""
+    """設定管理を一元化するシングルトンクラス"""
     
     _instance = None
     
@@ -42,32 +44,24 @@ class ConfigManager:
         self._initialized = True
         self.logger = logging.getLogger(__name__)
         
-        # PathRegistryを初期化
-        try:
-            from PathRegistry import PathRegistry
-            self.registry = PathRegistry.get_instance()
-        except ImportError:
-            self.registry = None
-            self.logger.warning("PathRegistryを読み込めませんでした")
+        # パスマネージャーの取得
+        self.path_manager = PathManager()
         
         # 設定ファイルのパス
         if config_path:
             self.config_file = Path(config_path)
         else:
             # デフォルトの設定ファイルパス
-            self.config_file = Path.home() / "Documents" / "ProjectSuite" / "config.json"
-        
-        # ユーザードキュメントのProjectSuiteディレクトリ
-        self.user_docs_dir = Path.home() / "Documents" / "ProjectSuite"
+            self.config_file = self.path_manager.get_path("USER_DOCS") / "config.json"
         
         # デフォルト設定ファイルのパス
-        self.defaults_file = self.user_docs_dir / "defaults.txt"
+        self.defaults_file = self.path_manager.get_path("DEFAULT_SETTINGS_FILE")
         
         # 必要なディレクトリを作成
         self._ensure_directories()
         
         # デフォルト設定ファイルを確認
-        self._ensure_default_settings_file()
+        self.create_default_settings_file()
         
         # configフォルダがない場合は作成を試みる
         try:
@@ -85,33 +79,18 @@ class ConfigManager:
         """必要なディレクトリを作成"""
         try:
             # ユーザードキュメントのProjectSuiteディレクトリを作成
-            self.user_docs_dir.mkdir(parents=True, exist_ok=True)
-            
-            # 初期ディレクトリ構造
-            directories = [
-                self.user_docs_dir / "logs",
-                self.user_docs_dir / "temp",
-                self.user_docs_dir / "backup",
-                self.user_docs_dir / "ProjectManager" / "data",
-                self.user_docs_dir / "ProjectManager" / "data" / "master",
-                self.user_docs_dir / "ProjectManager" / "data" / "exports",
-                self.user_docs_dir / "ProjectManager" / "data" / "templates"
-            ]
-            
-            # デスクトップのprojectsディレクトリ
-            desktop_projects_dir = Path.home() / "Desktop" / "projects"
-            directories.append(desktop_projects_dir)
-            
-            # 各ディレクトリを作成
-            for directory in directories:
-                directory.mkdir(parents=True, exist_ok=True)
-                self.logger.debug(f"ディレクトリを作成: {directory}")
+            self.path_manager.ensure_directory("USER_DOCS")
                 
         except Exception as e:
             self.logger.error(f"ディレクトリ作成エラー: {e}")
     
-    def _ensure_default_settings_file(self) -> None:
-        """デフォルト設定ファイルの存在を確認し、必要に応じて作成"""
+    def create_default_settings_file(self) -> bool:
+        """
+        デフォルト設定ファイルの存在を確認し、必要に応じて作成
+        
+        Returns:
+            bool: 正常に処理が完了した場合はTrue
+        """
         try:
             if not self.defaults_file.exists():
                 # 親ディレクトリの存在を確認
@@ -124,9 +103,12 @@ class ConfigManager:
                 self.logger.info(f"デフォルト設定ファイルを作成しました: {self.defaults_file}")
             else:
                 self.logger.debug(f"デフォルト設定ファイルは既に存在します: {self.defaults_file}")
+            
+            return True
                 
         except Exception as e:
             self.logger.error(f"デフォルト設定ファイル作成エラー: {e}")
+            return False
     
     def _load_config(self) -> Dict[str, Any]:
         """
@@ -183,7 +165,7 @@ class ConfigManager:
                                 continue
             else:
                 # デフォルト設定ファイルがない場合は作成
-                self._ensure_default_settings_file()
+                self.create_default_settings_file()
                 
                 # 作成したファイルから読み込み直す
                 if self.defaults_file.exists():
@@ -225,17 +207,19 @@ class ConfigManager:
         Returns:
             Dict[str, Any]: デフォルト設定
         """
-        user_doc_dir = Path.home() / "Documents" / "ProjectSuite"
+        # パスマネージャからパスを取得
+        user_doc_dir = self.path_manager.get_path("USER_DOCS")
+        output_base_dir = self.path_manager.get_path("OUTPUT_BASE_DIR")
         
         return {
             'paths': {
-                'output_base_dir': str(Path.home() / "Desktop" / "projects"),
+                'output_base_dir': str(output_base_dir),
                 'user_data_dir': str(user_doc_dir),
-                'logs_dir': str(user_doc_dir / "logs"),
-                'master_dir': str(user_doc_dir / "ProjectManager" / "data" / "master"),
-                'templates_dir': str(user_doc_dir / "ProjectManager" / "data" / "templates"),
-                'exports_dir': str(user_doc_dir / "ProjectManager" / "data" / "exports"),
-                'db_path': str(user_doc_dir / "ProjectManager" / "data" / "projects.db")
+                'logs_dir': str(self.path_manager.get_path("LOGS_DIR")),
+                'master_dir': str(self.path_manager.get_path("MASTER_DIR")),
+                'templates_dir': str(self.path_manager.get_path("TEMPLATES_DIR")),
+                'exports_dir': str(self.path_manager.get_path("EXPORTS_DIR")),
+                'db_path': str(self.path_manager.get_path("DB_PATH"))
             },
             'defaults': default_settings,
             'app': {
@@ -259,21 +243,16 @@ class ConfigManager:
                 
             self.logger.info(f"設定を保存しました: {self.config_file}")
             
-            # PathRegistryに通知
-            if self.registry:
-                try:
-                    # パス設定のコピー
-                    if 'paths' in self.config:
-                        for key, value in self.config['paths'].items():
-                            normalized_key = key.upper()
-                            # output_base_dirの場合はOUTPUT_BASE_DIRとして登録
-                            if key == 'output_base_dir':
-                                self.registry.register_path("OUTPUT_BASE_DIR", value)
-                            else:
-                                # その他のパスはそのまま登録
-                                self.registry.register_path(normalized_key, value)
-                except Exception as e:
-                    self.logger.error(f"PathRegistry更新エラー: {e}")
+            # パスマネージャーに通知
+            if 'paths' in self.config:
+                for key, value in self.config['paths'].items():
+                    normalized_key = key.upper()
+                    # output_base_dirの場合はOUTPUT_BASE_DIRとして登録
+                    if key == 'output_base_dir':
+                        self.path_manager.register_path("OUTPUT_BASE_DIR", value)
+                    else:
+                        # その他のパスはそのまま登録
+                        self.path_manager.register_path(normalized_key, value)
                     
         except Exception as e:
             self.logger.error(f"設定保存エラー: {e}")
@@ -317,15 +296,14 @@ class ConfigManager:
             self.config[section] = {}
         self.config[section][key] = value
         
-        # 特定の設定はPathRegistryにも反映
+        # 特定の設定はパスマネージャーにも反映
         if section == 'paths':
-            if self.registry:
-                normalized_key = key.upper()
-                # output_base_dirの場合はOUTPUT_BASE_DIRとして登録
-                if key == 'output_base_dir':
-                    self.registry.register_path("OUTPUT_BASE_DIR", value)
-                else:
-                    self.registry.register_path(normalized_key, value)
+            normalized_key = key.upper()
+            # output_base_dirの場合はOUTPUT_BASE_DIRとして登録
+            if key == 'output_base_dir':
+                self.path_manager.register_path("OUTPUT_BASE_DIR", value)
+            else:
+                self.path_manager.register_path(normalized_key, value)
         
         # デフォルト設定の変更の場合はファイルに反映
         if section == 'defaults':
@@ -388,8 +366,16 @@ class ConfigManager:
         # 設定更新
         self.set_setting('paths', 'output_base_dir', output_dir)
         
-        # PathRegistryにも反映（エイリアスの更新はPathRegistry内部で処理）
-        if self.registry:
-            self.registry.register_path("OUTPUT_BASE_DIR", output_dir)
+        # パスマネージャーにも反映
+        self.path_manager.update_output_dir(output_dir)
             
         self.logger.info(f"出力ディレクトリを更新しました: {output_dir}")
+    
+    def load_or_create_defaults(self) -> None:
+        """デフォルト設定ファイルが存在しない場合は作成し、設定を読み込む"""
+        if not self.defaults_file.exists():
+            self.create_default_settings_file()
+        
+        # 設定の読み込み
+        self.config = self._load_config()
+        self.logger.debug("設定をロードしました")

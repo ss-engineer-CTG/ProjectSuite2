@@ -1,14 +1,12 @@
 """詳細プロジェクト作成フォーム"""
 
 import customtkinter as ctk 
-from tkinter import messagebox
-import logging
 from typing import Dict, Any
-from pathlib import Path
+from datetime import datetime
 
-from ProjectManager.src.core.config import Config
+from ProjectManager.src.ui.project.base import BaseProjectForm
 from ProjectManager.src.core.master_data import MasterDataManager
-from .base import BaseProjectForm
+from ProjectManager.src.core.log_manager import get_logger
 
 class DetailProjectForm(BaseProjectForm):
     """詳細プロジェクト作成フォーム"""
@@ -21,13 +19,14 @@ class DetailProjectForm(BaseProjectForm):
             db_manager: データベースマネージャー
         """
         super().__init__()
+        self.logger = get_logger(__name__)
         self.db_manager = db_manager
         
         # マスターデータマネージャーの初期化
         try:
-            self.master_data = MasterDataManager(Config.MASTER_DATA_FILE)
+            self.master_data = MasterDataManager()
         except Exception as e:
-            logging.error(f"マスターデータ初期化エラー: {e}")
+            self.error_handler.handle_error(e, "初期化エラー")
             raise
         
         # 現在の選択値を保持
@@ -58,21 +57,25 @@ class DetailProjectForm(BaseProjectForm):
 
     def setup_gui(self):
         """GUIの構築"""
-        main_frame = ctk.CTkFrame(self.window, fg_color=self.colors.BACKGROUND)
+        main_frame = self.create_frame(
+            self.window,
+            fg_color=self.colors.BACKGROUND
+        )
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         # スクロール可能なフレーム
-        self.scroll_frame = ctk.CTkScrollableFrame(
+        self.scroll_frame = self.create_scrollable_frame(
             main_frame,
-            label_text="プロジェクト詳細情報",
-            fg_color=self.colors.CARD_BG
+            label_text="プロジェクト詳細情報"
         )
         self.scroll_frame.pack(fill="both", expand=True)
         
         # 基本情報セクション
         self._create_section_label(self.scroll_frame, "基本情報")
-        self._create_input_field(self.scroll_frame, "プロジェクト名", True, "project_name")
-        self._create_input_field(self.scroll_frame, "開始日", True, "start_date")
+        self._create_input_field(self.scroll_frame, "プロジェクト名", True, "project_name", 
+                               validator=self._validate_project_name)
+        self._create_input_field(self.scroll_frame, "開始日", True, "start_date", 
+                               validator=self._validate_date)
         self._create_combo_field(
             self.scroll_frame, "ステータス", "status", 
             ["進行中", "完了", "中止"], True
@@ -121,37 +124,28 @@ class DetailProjectForm(BaseProjectForm):
 
     def _create_button_frame(self, parent):
         """ボタンフレームの作成"""
-        button_frame = ctk.CTkFrame(parent, fg_color=self.colors.CARD_BG)
+        button_frame = self.create_frame(parent)
         button_frame.pack(fill="x", pady=(20, 0))
         
-        save_button = ctk.CTkButton(
+        save_button = self.create_button(
             button_frame,
             text="保存",
-            command=self.save,
-            font=self.default_font,
-            fg_color=self.colors.BUTTON_PRIMARY,
-            hover_color=self.colors.BUTTON_HOVER
+            command=self.save
         )
         save_button.pack(side="right", padx=5)
         
-        cancel_button = ctk.CTkButton(
+        cancel_button = self.create_danger_button(
             button_frame,
             text="キャンセル",
-            command=self.window.destroy,
-            font=self.default_font,
-            fg_color=self.colors.BUTTON_DANGER,
-            hover_color="#CC2F26"
+            command=self.window.destroy
         )
         cancel_button.pack(side="right", padx=5)
         
         # デフォルト値として保存するボタンを追加
-        save_default_button = ctk.CTkButton(
+        save_default_button = self.create_button(
             button_frame,
             text="デフォルトとして保存",
-            command=self.save_as_default,
-            font=self.default_font,
-            fg_color=self.colors.BUTTON_PRIMARY,
-            hover_color=self.colors.BUTTON_HOVER
+            command=self.save_as_default
         )
         save_default_button.pack(side="left", padx=5)
 
@@ -238,50 +232,19 @@ class DetailProjectForm(BaseProjectForm):
                 'line': self.current_selection['line']
             }
             
-            # デフォルト設定ファイルのパス
-            defaults_file = Path.home() / "Documents" / "ProjectSuite" / "defaults.txt"
-            
-            # 親ディレクトリの確認
-            defaults_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            # 既存の設定があれば読み込む
-            settings = {}
-            if defaults_file.exists():
-                with open(defaults_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith('#'):
-                            try:
-                                key, value = [x.strip() for x in line.split('=', 1)]
-                                settings[key] = value
-                            except ValueError:
-                                continue
-            
-            # 設定を更新
+            # 各設定を更新
             for key, value in values.items():
                 if value is not None:  # None値は保存しない
-                    settings[f"default_{key}"] = value
+                    self.config_manager.set_setting('defaults', key, value)
             
-            # 設定をファイルに書き込み
-            with open(defaults_file, 'w', encoding='utf-8') as f:
-                for key, value in settings.items():
-                    f.write(f"{key}={value}\n")
-            
-            # ConfigManagerの設定も更新
-            try:
-                from ProjectManager.src.core.config_manager import ConfigManager
-                config_manager = ConfigManager()
-                for key, value in values.items():
-                    if value is not None:
-                        config_manager.set_setting('defaults', key, value)
-            except Exception as e:
-                logging.warning(f"ConfigManagerの更新に失敗: {e}")
-            
-            messagebox.showinfo("成功", "現在の設定をデフォルト値として保存しました。")
+            self.error_handler.show_info_dialog(
+                "成功",
+                "現在の設定をデフォルト値として保存しました。",
+                self.window
+            )
             
         except Exception as e:
-            logging.error(f"デフォルト設定の保存に失敗: {e}")
-            messagebox.showerror("エラー", f"デフォルト設定の保存に失敗しました:\n{str(e)}")
+            self.error_handler.handle_error(e, "設定エラー", self.window)
 
     def save(self):
         """保存処理"""
@@ -299,17 +262,41 @@ class DetailProjectForm(BaseProjectForm):
                 'line': self.current_selection['line']
             }
             
-            if not all([values['project_name'], values['start_date'], 
-                       values['manager'], values['reviewer'], values['approver']]):
-                messagebox.showerror("エラー", "必須項目を入力してください。")
+            # 必須項目の確認
+            required_fields = {
+                'project_name': 'プロジェクト名',
+                'start_date': '開始日',
+                'manager': '担当者',
+                'reviewer': '確認者',
+                'approver': '承認者'
+            }
+            
+            errors = []
+            for field, label in required_fields.items():
+                if not values[field]:
+                    errors.append(f"{label}を入力してください")
+            
+            if errors:
+                self.error_handler.show_error_dialog(
+                    "入力エラー",
+                    "\n".join(errors),
+                    self.window
+                )
                 return
             
+            # 保存処理
             self.db_manager.insert_project(values)
-            messagebox.showinfo("成功", "プロジェクトを保存しました。")
+            
+            self.error_handler.show_info_dialog(
+                "成功",
+                "プロジェクトを保存しました。",
+                self.window
+            )
+            
             self.window.destroy()
             
         except Exception as e:
-            messagebox.showerror("エラー", f"保存に失敗しました:\n{str(e)}")
+            self.error_handler.handle_error(e, "保存エラー", self.window)
 
     def run(self):
         """アプリケーションの実行"""

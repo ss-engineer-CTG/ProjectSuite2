@@ -1,15 +1,18 @@
 """プロジェクトパス設定ダイアログ"""
 
-import os
 import logging
-import traceback
 from pathlib import Path
 from typing import Callable, Optional
 import tkinter as tk
-from tkinter import messagebox, filedialog
-import customtkinter as ctk
+from tkinter import filedialog
 
-class ProjectPathDialog:
+from ProjectManager.src.ui.base_ui_component import BaseUIComponent
+from ProjectManager.src.core.log_manager import get_logger
+from ProjectManager.src.core.path_manager import PathManager
+from ProjectManager.src.core.config_manager import ConfigManager
+from ProjectManager.src.core.error_handler import ErrorHandler
+
+class ProjectPathDialog(BaseUIComponent):
     """プロジェクトパス設定ダイアログ"""
     
     def __init__(self, parent, callback: Optional[Callable] = None):
@@ -20,7 +23,12 @@ class ProjectPathDialog:
             parent: 親ウィンドウ
             callback: 設定変更後のコールバック
         """
+        super().__init__()
+        self.logger = get_logger(__name__)
         self.callback = callback
+        self.path_manager = PathManager()
+        self.config_manager = ConfigManager()
+        self.error_handler = ErrorHandler()
         
         # ダイアログの作成
         self.window = ctk.CTkToplevel(parent)
@@ -35,12 +43,8 @@ class ProjectPathDialog:
         y = parent.winfo_rooty() + (parent.winfo_height() - window_height) // 2
         self.window.geometry(f"{window_width}x{window_height}+{x}+{y}")
         
-        # フォント設定
-        self.default_font = ("Meiryo", 12)
-        self.header_font = ("Meiryo", 14, "bold")
-        
         # 現在の設定を取得
-        self.current_path = self.get_current_projects_path()
+        self.current_path = self.path_manager.get_path("OUTPUT_BASE_DIR")
         
         # UIの構築
         self.setup_ui()
@@ -48,13 +52,16 @@ class ProjectPathDialog:
         # 閉じるボタンが押された時の処理
         self.window.protocol("WM_DELETE_WINDOW", self.on_close)
     
-    def setup_ui(self):
+    def setup_ui(self) -> None:
         """UIの構築"""
-        main_frame = ctk.CTkFrame(self.window, fg_color="transparent")
+        main_frame = self.create_frame(
+            self.window,
+            fg_color="transparent"
+        )
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         # ヘッダー
-        header_label = ctk.CTkLabel(
+        header_label = self.create_label(
             main_frame,
             text="プロジェクトフォルダの設定",
             font=self.header_font
@@ -66,39 +73,38 @@ class ProjectPathDialog:
             "プロジェクトのデータが保存されるフォルダを選択してください。\n"
             "既存のプロジェクトは自動的に移行されません。"
         )
-        desc_label = ctk.CTkLabel(
+        desc_label = self.create_label(
             main_frame,
             text=description,
-            font=self.default_font,
             wraplength=450
         )
         desc_label.pack(pady=(0, 20))
         
         # パス入力フレーム
-        path_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        path_frame = self.create_frame(
+            main_frame,
+            fg_color="transparent"
+        )
         path_frame.pack(fill="x", pady=10)
         
-        path_label = ctk.CTkLabel(
+        path_label = self.create_label(
             path_frame,
             text="プロジェクトフォルダ:",
-            font=self.default_font,
             width=140
         )
         path_label.pack(side="left")
         
-        self.path_var = tk.StringVar(value=self.current_path or "")
-        path_entry = ctk.CTkEntry(
+        self.path_var = tk.StringVar(value=str(self.current_path) or "")
+        path_entry = self.create_entry(
             path_frame,
-            textvariable=self.path_var,
-            font=self.default_font,
+            text_var=self.path_var,
             width=250
         )
         path_entry.pack(side="left", fill="x", expand=True, padx=5)
         
-        browse_button = ctk.CTkButton(
+        browse_button = self.create_button(
             path_frame,
             text="参照...",
-            font=self.default_font,
             width=80,
             command=self.browse_directory
         )
@@ -109,61 +115,39 @@ class ProjectPathDialog:
             "注意: 変更を適用するにはアプリケーションの再起動が必要です。\n"
             "既存のプロジェクトデータを新しいフォルダに手動で移行してください。"
         )
-        warning_label = ctk.CTkLabel(
+        warning_label = self.create_label(
             main_frame,
             text=warning_text,
-            font=("Meiryo", 10),
+            font=self.small_font,
             text_color="red",
             wraplength=450
         )
         warning_label.pack(pady=10)
         
         # ボタンフレーム
-        button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        button_frame = self.create_frame(
+            main_frame,
+            fg_color="transparent"
+        )
         button_frame.pack(fill="x", pady=10)
         
-        cancel_button = ctk.CTkButton(
+        cancel_button = self.create_button(
             button_frame,
             text="キャンセル",
-            font=self.default_font,
             width=100,
             command=self.on_close
         )
         cancel_button.pack(side="right", padx=5)
         
-        save_button = ctk.CTkButton(
+        save_button = self.create_button(
             button_frame,
             text="保存",
-            font=self.default_font,
             width=100,
             command=self.save_settings
         )
         save_button.pack(side="right", padx=5)
     
-    def get_current_projects_path(self) -> str:
-        """
-        現在のプロジェクトパスを取得
-        
-        Returns:
-            str: 現在のプロジェクトパス
-        """
-        try:
-            # PathRegistryからパスを取得
-            from PathRegistry import PathRegistry
-            registry = PathRegistry.get_instance()
-            projects_dir = registry.get_path("PROJECTS_DIR")
-            
-            if projects_dir:
-                return projects_dir
-            
-            # パスが未設定の場合のデフォルト
-            return str(Path.home() / "Desktop" / "projects")
-            
-        except Exception as e:
-            logging.error(f"プロジェクトパスの取得に失敗: {e}")
-            return str(Path.home() / "Desktop" / "projects")
-    
-    def browse_directory(self):
+    def browse_directory(self) -> None:
         """フォルダ選択ダイアログを表示"""
         initial_dir = self.path_var.get() if Path(self.path_var.get()).exists() else str(Path.home())
         directory = filedialog.askdirectory(initialdir=initial_dir)
@@ -171,51 +155,40 @@ class ProjectPathDialog:
         if directory:
             self.path_var.set(directory)
     
-    def save_settings(self):
+    def save_settings(self) -> None:
         """設定を保存"""
         new_path = self.path_var.get()
         
         if not new_path:
-            messagebox.showwarning("警告", "プロジェクトフォルダが指定されていません。")
+            self.error_handler.show_warning_dialog(
+                "警告",
+                "プロジェクトフォルダが指定されていません。",
+                self.window
+            )
             return
         
-        # パスの存在確認
-        path_obj = Path(new_path)
-        if not path_obj.exists():
+        try:
+            # パスを確保
+            path_obj = self.path_manager.ensure_directory(new_path)
+            
+            # 書き込み権限のチェック
             try:
-                path_obj.mkdir(parents=True, exist_ok=True)
-                logging.info(f"プロジェクトフォルダを作成しました: {path_obj}")
+                test_file = path_obj / '.write_test'
+                test_file.touch()
+                test_file.unlink()
             except Exception as e:
-                messagebox.showerror("エラー", f"フォルダの作成に失敗しました: {e}")
+                self.error_handler.show_error_dialog(
+                    "エラー",
+                    f"フォルダへの書き込み権限がありません: {e}",
+                    self.window
+                )
                 return
-        
-        # 書き込み権限のチェック
-        try:
-            test_file = path_obj / '.write_test'
-            test_file.touch()
-            test_file.unlink()
-        except Exception as e:
-            messagebox.showerror("エラー", f"フォルダへの書き込み権限がありません: {e}")
-            return
-        
-        try:
-            # PathRegistryを更新
-            from PathRegistry import PathRegistry
-            registry = PathRegistry.get_instance()
             
-            # 出力ディレクトリを更新
-            registry.update_output_dir(new_path)
-            
-            # ConfigManagerも利用可能なら更新
-            try:
-                from ProjectManager.src.core.config_manager import ConfigManager
-                config_manager = ConfigManager()
-                config_manager.update_output_dir(new_path)
-            except ImportError:
-                pass
+            # 設定マネージャーで出力ディレクトリを更新
+            self.config_manager.update_output_dir(str(path_obj))
             
             # デフォルト設定ファイルにも保存
-            self.save_to_defaults_txt(new_path)
+            self.save_to_defaults_txt(str(path_obj))
             
             # 画面を閉じる
             self.window.destroy()
@@ -224,14 +197,13 @@ class ProjectPathDialog:
             if self.callback:
                 self.callback()
                 
-            messagebox.showinfo(
+            self.error_handler.show_info_dialog(
                 "保存完了", 
                 "保存先フォルダを更新しました。\n設定を完全に適用するには、アプリケーションを再起動してください。"
             )
                 
         except Exception as e:
-            logging.error(f"設定の保存に失敗: {e}")
-            messagebox.showerror("エラー", f"設定の保存に失敗しました: {e}")
+            self.error_handler.handle_error(e, "設定エラー", self.window)
     
     def save_to_defaults_txt(self, projects_path: str) -> None:
         """
@@ -241,51 +213,15 @@ class ProjectPathDialog:
             projects_path: プロジェクトフォルダのパス
         """
         try:
-            # defaults.txtのパスを決定
-            defaults_paths = [
-                Path.home() / "Documents" / "ProjectSuite" / "defaults.txt",
-                Path(__file__).parent.parent.parent.parent / "defaults.txt"
-            ]
-            
-            # 最初に見つかったパスを使用
-            defaults_file = None
-            for path in defaults_paths:
-                if path.exists():
-                    defaults_file = path
-                    break
-            
-            # ファイルが見つからない場合は作成
-            if not defaults_file:
-                defaults_file = defaults_paths[0]
-                defaults_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            # 現在の設定を読み込む
-            settings = {}
-            if defaults_file.exists():
-                with open(defaults_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith('#'):
-                            try:
-                                key, value = [x.strip() for x in line.split('=', 1)]
-                                settings[key] = value
-                            except ValueError:
-                                continue
-            
             # 設定を更新
-            settings['custom_projects_dir'] = projects_path
+            self.config_manager.set_setting('defaults', 'output_dir', projects_path)
             
-            # 設定を保存
-            with open(defaults_file, 'w', encoding='utf-8') as f:
-                for key, value in settings.items():
-                    f.write(f"{key}={value}\n")
-            
-            logging.info(f"設定を保存しました: {defaults_file}")
+            self.logger.info(f"デフォルト設定を更新しました: output_dir={projects_path}")
             
         except Exception as e:
-            logging.error(f"defaults.txtへの保存に失敗: {e}")
+            self.logger.error(f"defaults.txtへの保存に失敗: {e}")
             raise
     
-    def on_close(self):
+    def on_close(self) -> None:
         """ダイアログを閉じる"""
         self.window.destroy()

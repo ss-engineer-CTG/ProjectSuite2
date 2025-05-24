@@ -1,60 +1,75 @@
+"""マスターデータ管理モジュール"""
+
 import pandas as pd
 from pathlib import Path
-import logging
 from typing import List, Dict, Optional, TypedDict
 from datetime import datetime
+
+from ProjectManager.src.core.log_manager import get_logger
+from ProjectManager.src.core.path_manager import PathManager
+from ProjectManager.src.core.file_utils import FileUtils
+from ProjectManager.src.core.error_handler import ValidationError
 
 class MasterDataEntry(TypedDict):
     code: str
     name: str
 
 class MasterDataManager:
-    def __init__(self, master_file_path: Path):
+    """マスターデータ管理クラス"""
+    
+    def __init__(self, master_file_path: Optional[Path] = None):
         """
-        マスタデータ管理クラスの初期化
+        マスターデータ管理クラスの初期化
         
         Args:
-            master_file_path (Path): マスタデータCSVファイルのパス
+            master_file_path (Optional[Path]): マスターデータCSVファイルのパス（省略時は自動設定）
         """
-        self.master_file_path = master_file_path
+        self.logger = get_logger(__name__)
+        self.path_manager = PathManager()
+        self.file_utils = FileUtils()
+        
+        # マスターファイルパスの設定
+        if master_file_path:
+            self.master_file_path = Path(master_file_path)
+        else:
+            self.master_file_path = self.path_manager.get_path("MASTER_DATA_FILE")
+        
         self.master_data: Optional[pd.DataFrame] = None
         self.last_updated: Optional[datetime] = None
+        
         self.load_master_data()
     
     def load_master_data(self) -> None:
         """
-        マスタデータをCSVファイルから読み込む
+        マスターデータをCSVファイルから読み込む
         
         Raises:
-            ValueError: データの読み込みまたは検証に失敗した場合
+            ValidationError: データの読み込みまたは検証に失敗した場合
         """
-        last_error = None
-        for encoding in ['utf-8', 'utf-8-sig', 'cp932']:
-            try:
-                self.master_data = pd.read_csv(
-                    self.master_file_path,
-                    encoding=encoding,
-                    dtype=str  # 全てのカラムを文字列として読み込み
-                )
-                self._validate_master_data()
-                self.last_updated = datetime.now()
-                logging.info(f"マスタデータを {encoding} で正常に読み込みました")
-                return
-            except UnicodeDecodeError:
-                continue
-            except Exception as e:
-                last_error = e
-                logging.error(f"{encoding} でのマスタデータ読み込みでエラー: {e}")
-        
-        error_msg = f"マスタデータの読み込みに失敗しました: {last_error}" if last_error else "マスタデータを読み込めませんでした"
-        raise ValueError(error_msg)
+        try:
+            # CSVファイルを読み込み
+            self.master_data = self.file_utils.read_csv(
+                self.master_file_path,
+                dtype=str  # 全てのカラムを文字列として読み込み
+            )
+            
+            # データの検証
+            self._validate_master_data()
+            
+            self.last_updated = datetime.now()
+            self.logger.info(f"マスターデータを正常に読み込みました")
+            
+        except Exception as e:
+            error_msg = f"マスターデータの読み込みに失敗しました: {e}"
+            self.logger.error(error_msg)
+            raise ValidationError("マスターデータエラー", error_msg)
             
     def _validate_master_data(self) -> None:
         """
-        マスタデータの妥当性検証
+        マスターデータの妥当性検証
         
         Raises:
-            ValueError: 必要なカラムが存在しない場合
+            ValidationError: 必要なカラムが存在しない場合
         """
         required_columns = [
             'division_code', 'division_name',
@@ -67,7 +82,9 @@ class MasterDataManager:
                           if col not in self.master_data.columns]
                           
         if missing_columns:
-            raise ValueError(f"必要なカラムがありません: {', '.join(missing_columns)}")
+            error_msg = f"必要なカラムがありません: {', '.join(missing_columns)}"
+            self.logger.error(error_msg)
+            raise ValidationError("マスターデータエラー", error_msg)
 
     def get_divisions(self) -> List[MasterDataEntry]:
         """
@@ -127,14 +144,11 @@ class MasterDataManager:
             ['division_code', 'factory_code', 'process_code', 'process_name']
         ]
         
-        filters = []
         if division_code is not None:
-            filters.append(processes['division_code'] == division_code)
+            processes = processes[processes['division_code'] == division_code]
+        
         if factory_code is not None:
-            filters.append(processes['factory_code'] == factory_code)
-            
-        if filters:
-            processes = processes[pd.concat(filters, axis=1).all(axis=1)]
+            processes = processes[processes['factory_code'] == factory_code]
         
         processes = processes[['process_code', 'process_name']].drop_duplicates()
         return [
@@ -163,16 +177,14 @@ class MasterDataManager:
             ['division_code', 'factory_code', 'process_code', 'line_code', 'line_name']
         ]
         
-        filters = []
         if division_code is not None:
-            filters.append(lines['division_code'] == division_code)
+            lines = lines[lines['division_code'] == division_code]
+        
         if factory_code is not None:
-            filters.append(lines['factory_code'] == factory_code)
+            lines = lines[lines['factory_code'] == factory_code]
+        
         if process_code is not None:
-            filters.append(lines['process_code'] == process_code)
-            
-        if filters:
-            lines = lines[pd.concat(filters, axis=1).all(axis=1)]
+            lines = lines[lines['process_code'] == process_code]
         
         lines = lines[['line_code', 'line_name']].drop_duplicates()
         return [
@@ -233,5 +245,5 @@ class MasterDataManager:
         return None
 
     def reload_master_data(self) -> None:
-        """マスタデータの再読み込み"""
+        """マスターデータの再読み込み"""
         self.load_master_data()

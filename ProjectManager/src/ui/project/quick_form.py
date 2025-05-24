@@ -1,14 +1,12 @@
 """クイックプロジェクト作成・編集フォーム"""
 
 import customtkinter as ctk
-from tkinter import messagebox
-import logging
-from datetime import datetime
 from typing import Optional, Dict, Any, Callable
+from datetime import datetime
 from pathlib import Path
 
-from ProjectManager.src.core.config import Config
 from ProjectManager.src.ui.project.base import BaseProjectForm
+from ProjectManager.src.core.log_manager import get_logger
 
 class QuickProjectForm(BaseProjectForm):
     """クイックプロジェクト作成・編集フォーム"""
@@ -29,6 +27,7 @@ class QuickProjectForm(BaseProjectForm):
             project_data: 編集対象のプロジェクトデータ
         """
         super().__init__()
+        self.logger = get_logger(__name__)
         self.parent = parent
         self.db_manager = db_manager
         self.callback = callback
@@ -61,20 +60,23 @@ class QuickProjectForm(BaseProjectForm):
 
     def setup_gui(self):
         """GUIの構築"""
-        main_frame = ctk.CTkFrame(self.window, fg_color=self.colors.BACKGROUND)
+        main_frame = self.create_frame(
+            self.window,
+            fg_color=self.colors.BACKGROUND
+        )
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         # スクロール可能なフレーム
-        scroll_frame = ctk.CTkScrollableFrame(
-            main_frame,
-            fg_color=self.colors.BACKGROUND
-        )
+        scroll_frame = self.create_scrollable_frame(main_frame)
         scroll_frame.pack(fill="both", expand=True, pady=(0, 20))
         
         # プロジェクト基本情報
         self._create_section_label(scroll_frame, "プロジェクト基本情報")
-        self._create_input_field(scroll_frame, "プロジェクト名", True, "project_name")
-        self._create_input_field(scroll_frame, "開始日", True, "start_date")
+        self._create_input_field(scroll_frame, "プロジェクト名", True, "project_name", 
+                               validator=self._validate_project_name)
+        self._create_input_field(scroll_frame, "開始日", True, "start_date", 
+                               validator=self._validate_date)
+        
         # 開始日に今日の日付を設定
         self.start_date.insert(0, datetime.now().strftime('%Y-%m-%d'))
         
@@ -95,40 +97,30 @@ class QuickProjectForm(BaseProjectForm):
         self._create_input_field(scroll_frame, "line", False, "line", "ラインコードを入力")
         
         # ボタンフレーム
-        button_frame = ctk.CTkFrame(main_frame, fg_color=self.colors.CARD_BG)
+        button_frame = self.create_frame(main_frame)
         button_frame.pack(fill="x", pady=(20, 0))
         
         # デフォルト値として保存するボタンを追加
-        save_default_button = ctk.CTkButton(
+        save_default_button = self.create_button(
             button_frame,
             text="デフォルトとして保存",
-            command=self.save_as_default,
-            font=self.default_font,
-            fg_color=self.colors.BUTTON_PRIMARY,
-            hover_color=self.colors.BUTTON_HOVER
+            command=self.save_as_default
         )
         save_default_button.pack(side="left", padx=5)
         
         # 保存ボタン
-        save_button = ctk.CTkButton(
+        save_button = self.create_button(
             button_frame,
             text="保存",
-            command=self.save,
-            font=self.default_font,
-            fg_color=self.colors.BUTTON_PRIMARY,
-            text_color=self.colors.BUTTON_TEXT,
-            hover_color=self.colors.BUTTON_HOVER
+            command=self.save
         )
         save_button.pack(side="right", padx=5)
         
         # キャンセルボタン
-        cancel_button = ctk.CTkButton(
+        cancel_button = self.create_danger_button(
             button_frame,
             text="キャンセル",
-            command=self.cancel,
-            font=self.default_font,
-            fg_color=self.colors.BUTTON_DANGER,
-            hover_color="#CC2F26"
+            command=self.cancel
         )
         cancel_button.pack(side="right", padx=5)
 
@@ -152,61 +144,28 @@ class QuickProjectForm(BaseProjectForm):
             # 現在の入力値を取得
             values = {
                 'project_name': self.project_name.get().strip(),
-                'start_date': self.start_date.get().strip(),
                 'manager': self.manager.get().strip(),
                 'reviewer': self.reviewer.get().strip(),
                 'approver': self.approver.get().strip(),
-                'status': self.status.get().strip(),
                 'division': self.division.get().strip(),
                 'factory': self.factory.get().strip(),
                 'process': self.process.get().strip(),
                 'line': self.line.get().strip()
             }
             
-            # デフォルト設定ファイルのパス
-            defaults_file = Path.home() / "Documents" / "ProjectSuite" / "defaults.txt"
-            
-            # 親ディレクトリの確認
-            defaults_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            # 既存の設定があれば読み込む
-            settings = {}
-            if defaults_file.exists():
-                with open(defaults_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith('#'):
-                            try:
-                                key, value = [x.strip() for x in line.split('=', 1)]
-                                settings[key] = value
-                            except ValueError:
-                                continue
-            
-            # 設定を更新
+            # 各設定を更新
             for key, value in values.items():
                 if value:  # 空の値は保存しない
-                    settings[f"default_{key}"] = value
+                    self.config_manager.set_setting('defaults', key, value)
             
-            # 設定をファイルに書き込み
-            with open(defaults_file, 'w', encoding='utf-8') as f:
-                for key, value in settings.items():
-                    f.write(f"{key}={value}\n")
-            
-            # ConfigManagerの設定も更新
-            try:
-                from ProjectManager.src.core.config_manager import ConfigManager
-                config_manager = ConfigManager()
-                for key, value in values.items():
-                    if value:
-                        config_manager.set_setting('defaults', key, value)
-            except Exception as e:
-                logging.warning(f"ConfigManagerの更新に失敗: {e}")
-            
-            messagebox.showinfo("成功", "現在の設定をデフォルト値として保存しました。")
+            self.error_handler.show_info_dialog(
+                "成功",
+                "現在の設定をデフォルト値として保存しました。",
+                self.window
+            )
             
         except Exception as e:
-            logging.error(f"デフォルト設定の保存に失敗: {e}")
-            messagebox.showerror("エラー", f"デフォルト設定の保存に失敗しました:\n{str(e)}")
+            self.error_handler.handle_error(e, "設定エラー", self.window)
 
     def save(self):
         """保存処理"""
@@ -233,31 +192,50 @@ class QuickProjectForm(BaseProjectForm):
                 'approver': '承認者'
             }
             
+            errors = []
             for field, label in required_fields.items():
                 if not values[field]:
-                    messagebox.showerror("エラー", f"{label}を入力してください。")
-                    return
+                    errors.append(f"{label}を入力してください。")
+            
+            if errors:
+                self.error_handler.show_error_dialog(
+                    "入力エラー",
+                    "\n".join(errors),
+                    self.window
+                )
+                return
             
             # 日付形式の検証
             try:
                 datetime.strptime(values['start_date'], '%Y-%m-%d')
             except ValueError:
-                messagebox.showerror("エラー", "開始日の形式が正しくありません。\nYYYY-MM-DD形式で入力してください。")
+                self.error_handler.show_error_dialog(
+                    "入力エラー",
+                    "開始日の形式が正しくありません。\nYYYY-MM-DD形式で入力してください。",
+                    self.window
+                )
                 return
             
+            # 保存処理
             if self.edit_mode:
                 self.db_manager.update_project(self.project_data['project_id'], values)
             else:
                 self.db_manager.insert_project(values)
             
+            # コールバック実行
             if self.callback:
                 self.callback()
             
+            # 画面を閉じる
             self.window.destroy()
             
         except Exception as e:
-            messagebox.showerror("エラー", f"保存に失敗しました:\n{str(e)}")
+            self.error_handler.handle_error(e, "保存エラー", self.window)
 
     def cancel(self):
         """キャンセル処理"""
+        self.window.destroy()
+    
+    def on_closing(self):
+        """閉じる処理"""
         self.window.destroy()

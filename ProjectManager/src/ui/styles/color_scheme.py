@@ -1,3 +1,5 @@
+"""アプリケーション共通のカラースキーム定義"""
+
 class ColorScheme:
     """アプリケーション共通のカラースキーム定義"""
     
@@ -42,10 +44,28 @@ class ColorScheme:
     
     @classmethod
     def get_hover_color(cls, base_color: str) -> str:
-        """ホバー色を生成（ベース色より若干明るく）"""
+        """
+        ホバー色を生成（ベース色より若干明るく）
+        
+        Args:
+            base_color: ベース色
+            
+        Returns:
+            str: ホバー色
+        """
+        # この実装では単純に固定値を返すが、実際にはベース色から明るい色を生成する
         return cls.BUTTON_HOVER
     
     @classmethod
     def get_pressed_color(cls, base_color: str) -> str:
-        """押下時の色を生成（ベース色より若干暗く）"""
+        """
+        押下時の色を生成（ベース色より若干暗く）
+        
+        Args:
+            base_color: ベース色
+            
+        Returns:
+            str: 押下時の色
+        """
+        # この実装では単純に固定値を返すが、実際にはベース色から暗い色を生成する
         return '#E0E0E0'  # デフォルトの押下時色
