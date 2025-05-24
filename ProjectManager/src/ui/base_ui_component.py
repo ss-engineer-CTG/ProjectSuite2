@@ -59,14 +59,20 @@ class BaseUIComponent:
             
         padding = padding or self.styles['padding']
         
-        label = ctk.CTkLabel(
-            parent,
-            text=text,
-            font=font,
-            anchor=anchor,
-            text_color=text_color,
-            width=width
-        )
+        # パラメータの準備（Noneの場合は除外）
+        label_kwargs = {
+            'master': parent,
+            'text': text,
+            'font': font,
+            'anchor': anchor,
+            'text_color': text_color
+        }
+        
+        # widthがNoneでない場合のみ追加
+        if width is not None:
+            label_kwargs['width'] = width
+        
+        label = ctk.CTkLabel(**label_kwargs)
         
         return label
     
@@ -109,17 +115,23 @@ class BaseUIComponent:
         if text_color is None:
             text_color = self.colors.BUTTON_TEXT
         
-        button = ctk.CTkButton(
-            parent,
-            text=text,
-            command=command,
-            width=width,
-            height=height,
-            fg_color=fg_color,
-            hover_color=hover_color,
-            text_color=text_color,
-            font=font
-        )
+        # パラメータの準備
+        button_kwargs = {
+            'master': parent,
+            'text': text,
+            'command': command,
+            'width': width,
+            'fg_color': fg_color,
+            'hover_color': hover_color,
+            'text_color': text_color,
+            'font': font
+        }
+        
+        # heightがNoneでない場合のみ追加
+        if height is not None:
+            button_kwargs['height'] = height
+        
+        button = ctk.CTkButton(**button_kwargs)
         
         return button
     
@@ -170,16 +182,23 @@ class BaseUIComponent:
         if width is None:
             width = self.styles['entry_width']
         
-        entry = ctk.CTkEntry(
-            parent,
-            width=width,
-            placeholder_text=placeholder,
-            font=self.default_font,
-            fg_color=self.colors.INPUT_BG,
-            text_color=self.colors.INPUT_TEXT,
-            border_color=self.colors.INPUT_BORDER,
-            textvariable=text_var
-        )
+        # パラメータの準備
+        entry_kwargs = {
+            'master': parent,
+            'width': width,
+            'font': self.default_font,
+            'fg_color': self.colors.INPUT_BG,
+            'text_color': self.colors.INPUT_TEXT,
+            'border_color': self.colors.INPUT_BORDER
+        }
+        
+        # オプションパラメータの追加
+        if placeholder is not None:
+            entry_kwargs['placeholder_text'] = placeholder
+        if text_var is not None:
+            entry_kwargs['textvariable'] = text_var
+        
+        entry = ctk.CTkEntry(**entry_kwargs)
         
         return entry
     
@@ -205,27 +224,35 @@ class BaseUIComponent:
         if width is None:
             width = self.styles['entry_width']
         
-        combo = ctk.CTkComboBox(
-            parent,
-            values=values,
-            width=width,
-            command=command,
-            state=state,
-            variable=variable,
-            font=self.default_font,
-            fg_color=self.colors.INPUT_BG,
-            text_color=self.colors.INPUT_TEXT,
-            border_color=self.colors.INPUT_BORDER,
-            button_color=self.colors.BUTTON_PRIMARY,
-            button_hover_color=self.colors.BUTTON_HOVER,
-            dropdown_fg_color=self.colors.CARD_BG
-        )
+        # パラメータの準備
+        combo_kwargs = {
+            'master': parent,
+            'values': values,
+            'width': width,
+            'state': state,
+            'font': self.default_font,
+            'fg_color': self.colors.INPUT_BG,
+            'text_color': self.colors.INPUT_TEXT,
+            'border_color': self.colors.INPUT_BORDER,
+            'button_color': self.colors.BUTTON_PRIMARY,
+            'button_hover_color': self.colors.BUTTON_HOVER,
+            'dropdown_fg_color': self.colors.CARD_BG
+        }
+        
+        # オプションパラメータの追加
+        if command is not None:
+            combo_kwargs['command'] = command
+        if variable is not None:
+            combo_kwargs['variable'] = variable
+        
+        combo = ctk.CTkComboBox(**combo_kwargs)
         
         return combo
     
     def create_frame(self, parent: ctk.CTkFrame, fg_color: Optional[str] = None,
                    border_width: int = 0, border_color: Optional[str] = None,
-                   corner_radius: int = 10) -> ctk.CTkFrame:
+                   corner_radius: int = 10, width: Optional[int] = None,
+                   height: Optional[int] = None) -> ctk.CTkFrame:
         """
         フレームの作成
         
@@ -235,6 +262,8 @@ class BaseUIComponent:
             border_width: ボーダー幅
             border_color: ボーダー色
             corner_radius: 角の丸み
+            width: フレームの幅
+            height: フレームの高さ
             
         Returns:
             ctk.CTkFrame: 作成されたフレーム
@@ -245,13 +274,27 @@ class BaseUIComponent:
         if border_color is None and border_width > 0:
             border_color = self.colors.FRAME_BORDER
         
-        frame = ctk.CTkFrame(
-            parent,
-            fg_color=fg_color,
-            border_width=border_width,
-            border_color=border_color,
-            corner_radius=corner_radius
-        )
+        # パラメータの準備
+        frame_kwargs = {
+            'master': parent,
+            'fg_color': fg_color,
+            'border_width': border_width,
+            'corner_radius': corner_radius
+        }
+        
+        # border_colorがある場合のみ追加
+        if border_color is not None:
+            frame_kwargs['border_color'] = border_color
+            
+        # widthがある場合のみ追加
+        if width is not None:
+            frame_kwargs['width'] = width
+            
+        # heightがある場合のみ追加
+        if height is not None:
+            frame_kwargs['height'] = height
+        
+        frame = ctk.CTkFrame(**frame_kwargs)
         
         return frame
     
@@ -277,13 +320,19 @@ class BaseUIComponent:
         if label_font is None and label_text:
             label_font = self.header_font
         
-        frame = ctk.CTkScrollableFrame(
-            parent,
-            label_text=label_text,
-            fg_color=fg_color,
-            scrollbar_button_color=self.colors.SCROLLBAR_FG,
-            scrollbar_button_hover_color=self.colors.get_hover_color(self.colors.SCROLLBAR_FG)
-        )
+        # パラメータの準備
+        frame_kwargs = {
+            'master': parent,
+            'fg_color': fg_color,
+            'scrollbar_button_color': self.colors.SCROLLBAR_FG,
+            'scrollbar_button_hover_color': self.colors.get_hover_color(self.colors.SCROLLBAR_FG)
+        }
+        
+        # label_textがある場合のみ追加
+        if label_text:
+            frame_kwargs['label_text'] = label_text
+        
+        frame = ctk.CTkScrollableFrame(**frame_kwargs)
         
         if hasattr(frame, '_scrollbar'):
             frame._scrollbar.configure(

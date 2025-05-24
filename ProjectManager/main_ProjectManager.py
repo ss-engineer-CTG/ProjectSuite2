@@ -19,7 +19,9 @@ if getattr(sys, 'frozen', False):
         sys.path.insert(0, str(APP_ROOT))
 else:
     # 開発環境での実行
-    APP_ROOT = Path(__file__).parent
+    # main_ProjectManager.pyはProjectManagerフォルダ内にあるため、
+    # ProjectManagerフォルダの親ディレクトリをルートとする
+    APP_ROOT = Path(__file__).parent.parent
     
     # 開発環境ではプロジェクトルートをPYTHONPATHに追加
     if str(APP_ROOT) not in sys.path:

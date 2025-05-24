@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Callable, Optional
 import tkinter as tk
 from tkinter import filedialog
+import customtkinter as ctk
 
 from ProjectManager.src.ui.base_ui_component import BaseUIComponent
 from ProjectManager.src.core.log_manager import get_logger
@@ -75,8 +76,7 @@ class ProjectPathDialog(BaseUIComponent):
         )
         desc_label = self.create_label(
             main_frame,
-            text=description,
-            wraplength=450
+            text=description
         )
         desc_label.pack(pady=(0, 20))
         
@@ -119,8 +119,7 @@ class ProjectPathDialog(BaseUIComponent):
             main_frame,
             text=warning_text,
             font=self.small_font,
-            text_color="red",
-            wraplength=450
+            text_color="red"
         )
         warning_label.pack(pady=10)
         

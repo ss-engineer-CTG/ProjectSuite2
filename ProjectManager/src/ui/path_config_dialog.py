@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable, Optional
 import tkinter as tk
 from tkinter import filedialog
+import customtkinter as ctk
 
 from ProjectManager.src.ui.base_ui_component import BaseUIComponent
 from ProjectManager.src.core.log_manager import get_logger
@@ -43,7 +44,7 @@ class PathConfigDialog(BaseUIComponent):
         # 閉じるボタンが押された時の処理
         self.window.protocol("WM_DELETE_WINDOW", self.on_close)
     
-    def create_dialog(self, parent) -> tk.Toplevel:
+    def create_dialog(self, parent) -> ctk.CTkToplevel:
         """
         ダイアログウィンドウの作成
         
@@ -51,7 +52,7 @@ class PathConfigDialog(BaseUIComponent):
             parent: 親ウィンドウ
             
         Returns:
-            tk.Toplevel: ダイアログウィンドウ
+            ctk.CTkToplevel: ダイアログウィンドウ
         """
         window = ctk.CTkToplevel(parent)
         window.title("プロジェクトデータの保存先設定")
@@ -90,8 +91,7 @@ class PathConfigDialog(BaseUIComponent):
         )
         desc_label = self.create_label(
             main_frame,
-            text=description,
-            wraplength=450
+            text=description
         )
         desc_label.pack(pady=(0, 20))
         
@@ -134,8 +134,7 @@ class PathConfigDialog(BaseUIComponent):
             main_frame,
             text=warning_text,
             font=self.small_font,
-            text_color="red",
-            wraplength=450
+            text_color="red"
         )
         warning_label.pack(pady=10)
         
@@ -145,8 +144,7 @@ class PathConfigDialog(BaseUIComponent):
             main_frame,
             text=current_info,
             font=self.small_font,
-            text_color="gray",
-            wraplength=450
+            text_color="gray"
         )
         info_label.pack(pady=(0, 10))
         
