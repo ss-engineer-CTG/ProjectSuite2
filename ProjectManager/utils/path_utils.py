@@ -142,10 +142,10 @@ class PathManager:
         
         if len(name_parts) == 2:
             base_name, extension = name_parts
-            pattern = f"{base_name}_{{}}}.{extension}"
+            pattern = base_name + "_{}." + extension
         else:
             base_name = desired_name
-            pattern = f"{base_name}_{{}}"
+            pattern = base_name + "_{}"
         
         while target_path.exists():
             new_name = pattern.format(counter)

@@ -18,7 +18,9 @@ from utils.error_handler import ErrorHandler
 def setup_logging():
     """ログシステムの初期化"""
     try:
-        log_dir = Path(UnifiedConfig.get_path('LOGS_DIR'))
+        # UnifiedConfigのインスタンスを作成
+        config = UnifiedConfig()
+        log_dir = Path(config.get_path('LOGS_DIR'))
         log_dir.mkdir(parents=True, exist_ok=True)
         
         logging.basicConfig(
