@@ -1,10 +1,37 @@
-# ProjectSuite 依存パッケージ
+# ProjectManager アプリケーション依存関係
+
+# === メイン依存関係 ===
+# CustomTkinter - モダンなTkinterベースのUIフレームワーク
 customtkinter>=5.2.0
-pandas>=2.0.0
-pywin32>=300
+
+# === Windows環境用依存関係 ===
+# pywin32 - Windows API アクセス（外部アプリ起動用）
+pywin32>=306; sys_platform == "win32"
+
+# === データ処理用依存関係 ===
+# openpyxl - Excel ファイル処理（将来的なExcel連携用）
 openpyxl>=3.1.0
-xlrd>=2.0.0
-portalocker>=2.7.0
-python-docx>=0.8.11
-Pillow>=10.0.0
-pyinstaller>=5.13.0
+
+# === 開発・テスト用依存関係（オプション） ===
+# pytest - テストフレームワーク
+pytest>=7.4.0
+
+# black - コードフォーマッター
+black>=23.0.0
+
+# flake8 - コード品質チェック
+flake8>=6.0.0
+
+# === バージョン固定理由 ===
+# customtkinter>=5.2.0  : 安定したダークテーマサポート
+# pywin32>=306          : Python 3.11+ 対応
+# openpyxl>=3.1.0       : Python 3.11+ 対応、セキュリティ修正含む
+# pytest>=7.4.0         : 最新のテスト機能
+# black>=23.0.0         : Python 3.11+ 対応
+# flake8>=6.0.0         : Python 3.11+ 対応
+
+# === システム要件 ===
+# Python 3.11+ 推奨
+# Windows 10/11 での動作確認済み
+# メモリ: 最低 4GB、推奨 8GB
+# ストレージ: 最低 100MB の空き容量
