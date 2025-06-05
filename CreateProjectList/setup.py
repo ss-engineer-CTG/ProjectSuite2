@@ -1,6 +1,7 @@
 """
 CreateProjectList セットアップファイル
-最小限の依存関係での軽量化
+パッケージ化対応の最小限設定
+KISS原則: 必要最小限の設定のみ
 """
 from setuptools import setup, find_packages
 from pathlib import Path
@@ -68,19 +69,16 @@ setup(
     # === Python要件 ===
     python_requires=">=3.8",
     
-    # === エントリーポイント ===
+    # === エントリーポイント（パッケージ化対応） ===
     entry_points={
         'console_scripts': [
             # メインアプリケーション
-            'CreateProjectList=CreateProjectList.main:main',
-            'cpl=CreateProjectList.main:main',  # 短縮コマンド
-            
-            # ユーティリティコマンド
-            'cpl-config=CreateProjectList.main:config_tool',
+            'CreateProjectList=CreateProjectList.__main__:main',
+            'cpl=CreateProjectList.__main__:main',  # 短縮コマンド
         ],
         'gui_scripts': [
             # GUIアプリケーション（Windowsで専用）
-            'CreateProjectList-gui=CreateProjectList.main:main',
+            'CreateProjectList-gui=CreateProjectList.__main__:main',
         ],
     },
     
@@ -127,10 +125,10 @@ setup(
     # === ZIP安全性 ===
     zip_safe=False,
     
-    # === 追加設定 ===
+    # === PyInstaller対応設定 ===
     options={
         'build_exe': {
-            # PyInstallerなどでのビルド設定
+            # PyInstallerでのビルド設定
             'excludes': [
                 # 不要なモジュールを除外（サイズ削減）
                 'tkinter.test',
@@ -159,6 +157,10 @@ setup(
             'include_files': [
                 # 必要なファイルを含める
                 ('CreateProjectList/config/', 'config/'),
+            ],
+            'packages': [
+                # 必要なパッケージを明示的に含める
+                'CreateProjectList',
             ],
         },
     },

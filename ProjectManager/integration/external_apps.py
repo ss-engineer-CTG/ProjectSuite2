@@ -21,19 +21,32 @@ class ExternalAppLauncher:
     def launch_document_processor(self, project_data: Dict[str, Any]) -> bool:
         """ドキュメント処理アプリの起動"""
         try:
-            # CreateProjectListアプリの起動
+            # CreateProjectListアプリの起動パス検索
             app_paths = [
+                # パッケージ化された実行ファイル
                 r"C:\Program Files (x86)\ProjectSuite Complete\CreateProjectList\CreateProjectList.exe",
                 r"C:\Program Files\ProjectSuite Complete\CreateProjectList\CreateProjectList.exe",
-                # 開発環境用パス
-                Path(__file__).parent.parent.parent / "CreateProjectList" / "main.py"
+                # 開発環境用：モジュール実行
+                Path(__file__).parent.parent.parent / "CreateProjectList"
             ]
             
             app_path = None
-            for path in app_paths:
+            execution_mode = None
+            
+            # 実行ファイルの確認
+            for path in app_paths[:2]:  # 最初の2つは実行ファイル
                 if Path(path).exists():
                     app_path = Path(path)
+                    execution_mode = "executable"
                     break
+            
+            # 開発環境でのモジュール確認
+            if not app_path:
+                dev_path = app_paths[2]
+                if dev_path.exists() and (dev_path / "__main__.py").exists():
+                    app_path = dev_path
+                    execution_mode = "module"
+                    self.logger.info("開発環境でのモジュール実行を検出")
             
             if not app_path:
                 ErrorHandler.handle_warning(
@@ -48,18 +61,21 @@ class ExternalAppLauncher:
             env['PROJECT_NAME'] = project_data.get('project_name', '')
             env['PROJECT_PATH'] = project_data.get('project_path', '')
             env['PROJECT_MANAGER'] = project_data.get('manager', '')
+            env['PROJECT_ID'] = str(project_data.get('project_id', ''))
             
-            # アプリケーションの起動
-            if app_path.suffix == '.py':
-                # Python スクリプトとして実行
-                subprocess.Popen([
-                    'python', str(app_path)
-                ], env=env)
-            else:
+            # 実行方式に応じた起動
+            if execution_mode == "executable":
                 # 実行ファイルとして実行
                 subprocess.Popen([str(app_path)], env=env)
+                self.logger.info(f"実行ファイルとして起動: {app_path}")
+                
+            elif execution_mode == "module":
+                # Pythonモジュールとして実行
+                subprocess.Popen([
+                    'python', '-m', 'CreateProjectList'
+                ], cwd=str(app_path.parent), env=env)
+                self.logger.info(f"Pythonモジュールとして起動: {app_path}")
             
-            self.logger.info(f"ドキュメント処理アプリを起動しました: {app_path}")
             return True
             
         except Exception as e:
@@ -136,6 +152,7 @@ class ExternalAppLauncher:
             if os.name == 'nt':  # Windows
                 os.startfile(str(folder_path))
             elif os.name == 'posix':  # macOS/Linux
+                import sys
                 subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(folder_path)])
             
             self.logger.info(f"フォルダを開きました: {folder_path}")
@@ -167,23 +184,33 @@ class ExternalAppLauncher:
         """アプリケーションの利用可能性チェック"""
         try:
             if app_name == "document_processor":
+                # 実行ファイルの確認
                 app_paths = [
                     r"C:\Program Files (x86)\ProjectSuite Complete\CreateProjectList\CreateProjectList.exe",
                     r"C:\Program Files\ProjectSuite Complete\CreateProjectList\CreateProjectList.exe"
                 ]
+                for path in app_paths:
+                    if Path(path).exists():
+                        return True
+                
+                # 開発環境でのモジュール確認
+                dev_path = Path(__file__).parent.parent.parent / "CreateProjectList"
+                if dev_path.exists() and (dev_path / "__main__.py").exists():
+                    return True
+                
+                return False
+                
             elif app_name == "project_dashboard":
                 app_paths = [
                     r"C:\Program Files (x86)\ProjectSuite Complete\ProjectDashboard\Project Dashboard.exe",
                     r"C:\Program Files\ProjectSuite Complete\ProjectDashboard\Project Dashboard.exe"
                 ]
+                for path in app_paths:
+                    if Path(path).exists():
+                        return True
+                return False
             else:
                 return False
-            
-            for path in app_paths:
-                if Path(path).exists():
-                    return True
-            
-            return False
             
         except Exception as e:
             self.logger.error(f"アプリ利用可能性チェックエラー: {e}")
