@@ -1,30 +1,28 @@
 """
-パス操作ユーティリティ
-パス管理原則: パス結合・正規化・検証の統一処理
-KISS原則: シンプルなパス操作
+パス操作ユーティリティ（本番環境用簡素版）
+パス管理原則: パス結合・正規化・検証の基本処理のみ
 """
 
 import os
 import re
 import logging
 from pathlib import Path
-from typing import Union, Optional
+from typing import Union
 
 class PathManager:
-    """パス操作の統一管理クラス"""
+    """パス操作の基本管理クラス"""
     
     logger = logging.getLogger(__name__)
     
     @staticmethod
     def join_path(*args) -> Path:
-        """安全なパス結合（文字列結合禁止）"""
+        """安全なパス結合"""
         if not args:
             return Path()
         
-        # すべての引数をPathオブジェクトに変換して結合
         base_path = Path(args[0])
         for part in args[1:]:
-            if part:  # 空文字列はスキップ
+            if part:
                 base_path = base_path / part
         
         return base_path
@@ -34,7 +32,6 @@ class PathManager:
         """パスの正規化"""
         try:
             path = Path(path)
-            # 絶対パスに変換して正規化
             return path.resolve()
         except Exception as e:
             PathManager.logger.error(f"パス正規化エラー {path}: {e}")
@@ -68,12 +65,8 @@ class PathManager:
         if not component:
             return "unnamed"
         
-        # OSで使用できない文字を置換
-        if os.name == 'nt':  # Windows
-            invalid_chars = r'[<>:"/\\|?*]'
-        else:  # Unix/Linux/Mac
-            invalid_chars = r'[/]'
-        
+        # Windows用無効文字を置換
+        invalid_chars = r'[<>:"/\\|?*]'
         sanitized = re.sub(invalid_chars, '_', component.strip())
         
         # 連続するアンダースコアを単一に
@@ -83,14 +76,13 @@ class PathManager:
         sanitized = sanitized.strip('_. ')
         
         # Windowsの予約語チェック
-        if os.name == 'nt':
-            reserved_names = [
-                'CON', 'PRN', 'AUX', 'NUL',
-                'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
-                'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
-            ]
-            if sanitized.upper() in reserved_names:
-                sanitized = f"_{sanitized}"
+        reserved_names = [
+            'CON', 'PRN', 'AUX', 'NUL',
+            'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+            'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+        ]
+        if sanitized.upper() in reserved_names:
+            sanitized = f"_{sanitized}"
         
         # 空になった場合のフォールバック
         if not sanitized:
@@ -121,7 +113,7 @@ class PathManager:
         folder_name = '_'.join(filter(None, components))
         
         # 長すぎる場合は切り詰め
-        max_length = 200  # Windows の長いパス制限を考慮
+        max_length = 200
         if len(folder_name) > max_length:
             folder_name = folder_name[:max_length].rstrip('_')
         
@@ -138,7 +130,7 @@ class PathManager:
         
         # 重複する場合は番号を付与
         counter = 1
-        name_parts = desired_name.rsplit('.', 1)  # 拡張子を考慮
+        name_parts = desired_name.rsplit('.', 1)
         
         if len(name_parts) == 2:
             base_name, extension = name_parts
@@ -161,108 +153,3 @@ class PathManager:
                 break
         
         return target_path
-    
-    @staticmethod
-    def get_relative_path(target_path: Path, base_path: Path) -> Optional[Path]:
-        """相対パスの取得"""
-        try:
-            target_path = Path(target_path).resolve()
-            base_path = Path(base_path).resolve()
-            return target_path.relative_to(base_path)
-        except ValueError:
-            # base_pathから見て相対パスにできない場合
-            return None
-        except Exception as e:
-            PathManager.logger.error(f"相対パス取得エラー: {e}")
-            return None
-    
-    @staticmethod
-    def copy_directory_structure(src_dir: Path, dst_dir: Path, 
-                               copy_files: bool = False) -> bool:
-        """ディレクトリ構造のコピー"""
-        try:
-            src_dir = Path(src_dir)
-            dst_dir = Path(dst_dir)
-            
-            if not src_dir.exists():
-                return False
-            
-            dst_dir.mkdir(parents=True, exist_ok=True)
-            
-            for item in src_dir.rglob('*'):
-                if item.is_dir():
-                    # ディレクトリの作成
-                    relative_path = item.relative_to(src_dir)
-                    target_dir = dst_dir / relative_path
-                    target_dir.mkdir(parents=True, exist_ok=True)
-                elif copy_files and item.is_file():
-                    # ファイルのコピー
-                    import shutil
-                    relative_path = item.relative_to(src_dir)
-                    target_file = dst_dir / relative_path
-                    target_file.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(item, target_file)
-            
-            return True
-            
-        except Exception as e:
-            PathManager.logger.error(f"ディレクトリ構造コピーエラー: {e}")
-            return False
-    
-    @staticmethod
-    def find_files_by_pattern(directory: Path, pattern: str, 
-                            recursive: bool = True) -> list:
-        """パターンでファイル検索"""
-        try:
-            directory = Path(directory)
-            if not directory.exists():
-                return []
-            
-            if recursive:
-                return list(directory.rglob(pattern))
-            else:
-                return list(directory.glob(pattern))
-                
-        except Exception as e:
-            PathManager.logger.error(f"ファイル検索エラー: {e}")
-            return []
-    
-    @staticmethod
-    def get_directory_size(directory: Path) -> int:
-        """ディレクトリサイズの取得（バイト）"""
-        try:
-            directory = Path(directory)
-            if not directory.exists():
-                return 0
-            
-            total_size = 0
-            for item in directory.rglob('*'):
-                if item.is_file():
-                    total_size += item.stat().st_size
-            
-            return total_size
-            
-        except Exception as e:
-            PathManager.logger.error(f"ディレクトリサイズ取得エラー: {e}")
-            return 0
-    
-    @staticmethod
-    def cleanup_empty_directories(directory: Path) -> None:
-        """空ディレクトリのクリーンアップ"""
-        try:
-            directory = Path(directory)
-            if not directory.exists():
-                return
-            
-            # 深い階層から順番に処理
-            for item in sorted(directory.rglob('*'), key=lambda x: len(x.parts), reverse=True):
-                if item.is_dir():
-                    try:
-                        item.rmdir()  # 空の場合のみ削除される
-                        PathManager.logger.debug(f"空ディレクトリを削除: {item}")
-                    except OSError:
-                        # ディレクトリが空でない場合は無視
-                        pass
-                        
-        except Exception as e:
-            PathManager.logger.error(f"空ディレクトリクリーンアップエラー: {e}")

@@ -1,7 +1,6 @@
 """
-外部アプリケーション連携
+外部アプリケーション連携（Windows専用簡素版）
 KISS原則: シンプルな外部アプリ起動
-統合機能の簡素化
 """
 
 import os
@@ -21,32 +20,17 @@ class ExternalAppLauncher:
     def launch_document_processor(self, project_data: Dict[str, Any]) -> bool:
         """ドキュメント処理アプリの起動"""
         try:
-            # CreateProjectListアプリの起動パス検索
+            # CreateProjectListアプリの起動パス
             app_paths = [
-                # パッケージ化された実行ファイル
-                r"C:\Program Files (x86)\ProjectSuite Complete\CreateProjectList\CreateProjectList.exe",
                 r"C:\Program Files\ProjectSuite Complete\CreateProjectList\CreateProjectList.exe",
-                # 開発環境用：モジュール実行
-                Path(__file__).parent.parent.parent / "CreateProjectList"
+                r"C:\Program Files (x86)\ProjectSuite Complete\CreateProjectList\CreateProjectList.exe",
             ]
             
             app_path = None
-            execution_mode = None
-            
-            # 実行ファイルの確認
-            for path in app_paths[:2]:  # 最初の2つは実行ファイル
+            for path in app_paths:
                 if Path(path).exists():
                     app_path = Path(path)
-                    execution_mode = "executable"
                     break
-            
-            # 開発環境でのモジュール確認
-            if not app_path:
-                dev_path = app_paths[2]
-                if dev_path.exists() and (dev_path / "__main__.py").exists():
-                    app_path = dev_path
-                    execution_mode = "module"
-                    self.logger.info("開発環境でのモジュール実行を検出")
             
             if not app_path:
                 ErrorHandler.handle_warning(
@@ -63,18 +47,9 @@ class ExternalAppLauncher:
             env['PROJECT_MANAGER'] = project_data.get('manager', '')
             env['PROJECT_ID'] = str(project_data.get('project_id', ''))
             
-            # 実行方式に応じた起動
-            if execution_mode == "executable":
-                # 実行ファイルとして実行
-                subprocess.Popen([str(app_path)], env=env)
-                self.logger.info(f"実行ファイルとして起動: {app_path}")
-                
-            elif execution_mode == "module":
-                # Pythonモジュールとして実行
-                subprocess.Popen([
-                    'python', '-m', 'CreateProjectList'
-                ], cwd=str(app_path.parent), env=env)
-                self.logger.info(f"Pythonモジュールとして起動: {app_path}")
+            # 実行ファイルとして起動
+            subprocess.Popen([str(app_path)], env=env)
+            self.logger.info(f"CreateProjectListを起動: {app_path}")
             
             return True
             
@@ -85,12 +60,10 @@ class ExternalAppLauncher:
     def launch_project_dashboard(self) -> bool:
         """プロジェクトダッシュボードアプリの起動"""
         try:
-            # プロジェクトダッシュボードの固定パス
+            # プロジェクトダッシュボードの起動パス
             dashboard_paths = [
-                r"C:\Program Files (x86)\ProjectSuite Complete\ProjectDashboard\Project Dashboard.exe",
                 r"C:\Program Files\ProjectSuite Complete\ProjectDashboard\Project Dashboard.exe",
-                # 開発環境用パス
-                Path(__file__).parent.parent.parent / "ProjectDashboard" / "main.py"
+                r"C:\Program Files (x86)\ProjectSuite Complete\ProjectDashboard\Project Dashboard.exe",
             ]
             
             dashboard_path = None
@@ -107,15 +80,10 @@ class ExternalAppLauncher:
                 )
                 return False
             
-            # アプリケーションの起動
-            if dashboard_path.suffix == '.py':
-                # Python スクリプトとして実行
-                subprocess.Popen(['python', str(dashboard_path)])
-            else:
-                # 実行ファイルとして実行
-                subprocess.Popen([str(dashboard_path)])
+            # 実行ファイルとして起動
+            subprocess.Popen([str(dashboard_path)])
             
-            self.logger.info(f"プロジェクトダッシュボードを起動しました: {dashboard_path}")
+            self.logger.info(f"プロジェクトダッシュボードを起動: {dashboard_path}")
             return True
             
         except Exception as e:
@@ -149,12 +117,7 @@ class ExternalAppLauncher:
                 ErrorHandler.handle_warning(f"フォルダが存在しません: {folder_path}", "フォルダ表示")
                 return False
             
-            if os.name == 'nt':  # Windows
-                os.startfile(str(folder_path))
-            elif os.name == 'posix':  # macOS/Linux
-                import sys
-                subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(folder_path)])
-            
+            os.startfile(str(folder_path))
             self.logger.info(f"フォルダを開きました: {folder_path}")
             return True
             
@@ -168,7 +131,7 @@ class ExternalAppLauncher:
             if working_directory and Path(working_directory).exists():
                 # 指定ディレクトリでコマンドプロンプトを起動
                 subprocess.Popen(['cmd'], cwd=str(working_directory))
-                self.logger.info(f"コマンドプロンプトを起動しました: {working_directory}")
+                self.logger.info(f"コマンドプロンプトを起動: {working_directory}")
             else:
                 # デフォルトディレクトリでコマンドプロンプトを起動
                 subprocess.Popen(['cmd'])
@@ -184,31 +147,18 @@ class ExternalAppLauncher:
         """アプリケーションの利用可能性チェック"""
         try:
             if app_name == "document_processor":
-                # 実行ファイルの確認
                 app_paths = [
-                    r"C:\Program Files (x86)\ProjectSuite Complete\CreateProjectList\CreateProjectList.exe",
-                    r"C:\Program Files\ProjectSuite Complete\CreateProjectList\CreateProjectList.exe"
+                    r"C:\Program Files\ProjectSuite Complete\CreateProjectList\CreateProjectList.exe",
+                    r"C:\Program Files (x86)\ProjectSuite Complete\CreateProjectList\CreateProjectList.exe"
                 ]
-                for path in app_paths:
-                    if Path(path).exists():
-                        return True
-                
-                # 開発環境でのモジュール確認
-                dev_path = Path(__file__).parent.parent.parent / "CreateProjectList"
-                if dev_path.exists() and (dev_path / "__main__.py").exists():
-                    return True
-                
-                return False
+                return any(Path(path).exists() for path in app_paths)
                 
             elif app_name == "project_dashboard":
                 app_paths = [
-                    r"C:\Program Files (x86)\ProjectSuite Complete\ProjectDashboard\Project Dashboard.exe",
-                    r"C:\Program Files\ProjectSuite Complete\ProjectDashboard\Project Dashboard.exe"
+                    r"C:\Program Files\ProjectSuite Complete\ProjectDashboard\Project Dashboard.exe",
+                    r"C:\Program Files (x86)\ProjectSuite Complete\ProjectDashboard\Project Dashboard.exe"
                 ]
-                for path in app_paths:
-                    if Path(path).exists():
-                        return True
-                return False
+                return any(Path(path).exists() for path in app_paths)
             else:
                 return False
             

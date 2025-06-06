@@ -1,18 +1,17 @@
 """
-ファイル操作の共通処理
-KISS原則: シンプルなファイル操作
-DRY原則: 重複するファイル処理の統合
+ファイル操作の基本処理（本番環境用簡素版）
+KISS原則: シンプルなファイル操作のみ
 """
 
 import csv
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Tuple
 
 from core.constants import ValidationConstants
 
 class FileManager:
-    """ファイル操作の統一管理クラス"""
+    """ファイル操作の基本管理クラス"""
     
     logger = logging.getLogger(__name__)
     
@@ -93,77 +92,4 @@ class FileManager:
             
         except Exception as e:
             FileManager.logger.error(f"書き込み権限確認エラー {file_path}: {e}")
-            return False
-    
-    @staticmethod
-    def backup_file(file_path: Path, backup_dir: Optional[Path] = None) -> Optional[Path]:
-        """ファイルのバックアップ"""
-        try:
-            file_path = Path(file_path)
-            if not file_path.exists():
-                return None
-            
-            if backup_dir is None:
-                backup_dir = file_path.parent / 'backup'
-            
-            FileManager.ensure_directory(backup_dir)
-            
-            # タイムスタンプ付きバックアップファイル名
-            from datetime import datetime
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            backup_filename = f"{file_path.stem}_{timestamp}{file_path.suffix}"
-            backup_path = backup_dir / backup_filename
-            
-            # ファイルコピー
-            import shutil
-            shutil.copy2(file_path, backup_path)
-            
-            FileManager.logger.info(f"ファイルバックアップ完了: {file_path} -> {backup_path}")
-            return backup_path
-            
-        except Exception as e:
-            FileManager.logger.error(f"ファイルバックアップエラー {file_path}: {e}")
-            return None
-    
-    @staticmethod
-    def find_files(directory: Path, pattern: str = "*", recursive: bool = True) -> List[Path]:
-        """ファイル検索"""
-        try:
-            directory = Path(directory)
-            if not directory.exists():
-                return []
-            
-            if recursive:
-                return list(directory.rglob(pattern))
-            else:
-                return list(directory.glob(pattern))
-                
-        except Exception as e:
-            FileManager.logger.error(f"ファイル検索エラー {directory}: {e}")
-            return []
-    
-    @staticmethod
-    def get_file_size(file_path: Path) -> int:
-        """ファイルサイズの取得（バイト）"""
-        try:
-            return Path(file_path).stat().st_size
-        except Exception:
-            return 0
-    
-    @staticmethod
-    def is_file_locked(file_path: Path) -> bool:
-        """ファイルロック状態の確認"""
-        try:
-            file_path = Path(file_path)
-            if not file_path.exists():
-                return False
-            
-            # ファイルを開いてみて、ロックされているかチェック
-            with open(file_path, 'r+'):
-                pass
-            return False
-            
-        except PermissionError:
-            return True
-        except Exception:
             return False

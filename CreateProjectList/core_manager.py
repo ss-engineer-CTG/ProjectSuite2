@@ -1,6 +1,6 @@
 """
-コア機能統合管理
-設定・DB・ログ・パス管理を統合
+コア機能統合管理（本番環境用簡素版）
+設定・DB・パス管理のシンプル統合
 """
 import logging
 import sqlite3
@@ -9,8 +9,6 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-import tempfile
-import shutil
 
 class CoreManager:
     """コア機能統合管理クラス（シングルトン）"""
@@ -37,15 +35,7 @@ class CoreManager:
         self.config: Dict[str, Any] = {}
         self.config_file: Optional[Path] = None
         
-        # データベース関連
-        self.db_path: Optional[str] = None
-        self._db_lock = threading.Lock()
-        
-        # PathRegistry参照
-        self.registry = None
-        
         # 初期化
-        self._initialize_path_registry()
         self._initialize_config()
         self._setup_logging()
         
@@ -56,27 +46,13 @@ class CoreManager:
         """シングルトンインスタンス取得"""
         return cls()
     
-    def _initialize_path_registry(self):
-        """PathRegistry初期化"""
-        try:
-            from CreateProjectList.path_constants import PathKeys
-            
-            # PathRegistryのインポート試行
-            try:
-                from PathRegistry import PathRegistry
-                self.registry = PathRegistry.get_instance()
-                self.logger.info("PathRegistry連携を初期化しました")
-            except ImportError:
-                self.logger.warning("PathRegistryが利用できません")
-                
-        except Exception as e:
-            self.logger.error(f"PathRegistry初期化エラー: {e}")
-    
     def _initialize_config(self):
         """設定初期化"""
         try:
-            # 設定ファイルパスの決定
-            self.config_file = self._get_config_file_path()
+            from CreateProjectList.path_constants import get_config_path
+            
+            # 設定ファイルパス
+            self.config_file = get_config_path()
             
             # デフォルト設定
             self.config = self._get_default_config()
@@ -84,38 +60,18 @@ class CoreManager:
             # 設定ファイル読み込み
             self._load_config()
             
-            # パス情報の同期
-            self._sync_with_registry()
-            
         except Exception as e:
             self.logger.error(f"設定初期化エラー: {e}")
             self.config = self._get_default_config()
     
-    def _get_config_file_path(self) -> Path:
-        """設定ファイルパス取得"""
-        # PathRegistryから取得を試行
-        if self.registry:
-            try:
-                from CreateProjectList.path_constants import PathKeys
-                config_path = self.registry.get_path(PathKeys.CPL_CONFIG_PATH)
-                if config_path:
-                    return Path(config_path)
-            except Exception:
-                pass
-        
-        # デフォルトパス
-        user_docs = Path.home() / "Documents" / "ProjectSuite"
-        config_dir = user_docs / "CreateProjectList" / "config"
-        config_dir.mkdir(parents=True, exist_ok=True)
-        
-        return config_dir / "config.json"
-    
     def _get_default_config(self) -> Dict[str, Any]:
         """デフォルト設定取得"""
+        from CreateProjectList.path_constants import get_default_path, PathKeys
+        
         return {
-            'db_path': '',
-            'last_input_folder': '',
-            'last_output_folder': '',
+            'db_path': get_default_path(PathKeys.PM_DB_PATH),
+            'last_input_folder': get_default_path(PathKeys.PM_TEMPLATES_DIR),
+            'last_output_folder': get_default_path(PathKeys.OUTPUT_BASE_DIR),
             'replacement_rules': [
                 {"search": "#案件名#", "replace": "project_name"},
                 {"search": "#作成日#", "replace": "start_date"},
@@ -127,7 +83,7 @@ class CoreManager:
                 {"search": "#承認者#", "replace": "approver"},
                 {"search": "#事業部#", "replace": "division"}
             ],
-            'temp_dir': str(Path(tempfile.gettempdir()) / "CreateProjectList"),
+            'temp_dir': get_default_path(PathKeys.CPL_TEMP_DIR),
             'last_update': datetime.now().isoformat()
         }
     
@@ -156,11 +112,6 @@ class CoreManager:
     def _save_config(self):
         """設定ファイル保存"""
         try:
-            # バックアップ作成
-            if self.config_file.exists():
-                backup_path = self.config_file.with_suffix('.bak')
-                shutil.copy2(self.config_file, backup_path)
-            
             # ディレクトリ作成
             self.config_file.parent.mkdir(parents=True, exist_ok=True)
             
@@ -176,57 +127,12 @@ class CoreManager:
         except Exception as e:
             self.logger.error(f"設定保存エラー: {e}")
     
-    def _sync_with_registry(self):
-        """PathRegistryとの同期"""
-        if not self.registry:
-            return
-            
-        try:
-            from CreateProjectList.path_constants import PathKeys
-            
-            # データベースパス
-            db_path = self.registry.get_path(PathKeys.PM_DB_PATH)
-            if db_path and not self.config.get('db_path'):
-                self.config['db_path'] = db_path
-                self.logger.info(f"PathRegistryからDBパスを同期: {db_path}")
-            
-            # 入力フォルダ
-            input_folder = self.registry.get_path(PathKeys.PM_TEMPLATES_DIR)
-            if input_folder and not self.config.get('last_input_folder'):
-                self.config['last_input_folder'] = input_folder
-                self.logger.info(f"PathRegistryから入力フォルダを同期: {input_folder}")
-            
-            # 出力フォルダ
-            output_folder = self.registry.get_path(PathKeys.OUTPUT_BASE_DIR)
-            if output_folder and not self.config.get('last_output_folder'):
-                self.config['last_output_folder'] = output_folder
-                self.logger.info(f"PathRegistryから出力フォルダを同期: {output_folder}")
-            
-            # 一時ディレクトリ
-            temp_dir = self.registry.get_path(PathKeys.CPL_TEMP_DIR)
-            if temp_dir:
-                self.config['temp_dir'] = temp_dir
-                
-        except Exception as e:
-            self.logger.error(f"PathRegistry同期エラー: {e}")
-    
     def _setup_logging(self):
         """ログ設定"""
         try:
-            # ログディレクトリ
-            if self.registry:
-                try:
-                    from CreateProjectList.path_constants import PathKeys
-                    logs_dir = self.registry.get_path(PathKeys.LOGS_DIR)
-                    if logs_dir:
-                        log_dir = Path(logs_dir)
-                    else:
-                        log_dir = Path.home() / "Documents" / "ProjectSuite" / "logs"
-                except Exception:
-                    log_dir = Path.home() / "Documents" / "ProjectSuite" / "logs"
-            else:
-                log_dir = Path.home() / "Documents" / "ProjectSuite" / "logs"
+            from CreateProjectList.path_constants import get_default_path, PathKeys
             
+            log_dir = Path(get_default_path(PathKeys.LOGS_DIR))
             log_dir.mkdir(parents=True, exist_ok=True)
             log_file = log_dir / 'document_processor.log'
             
@@ -256,16 +162,7 @@ class CoreManager:
     def set_db_path(self, path: str):
         """データベースパス設定"""
         self.config['db_path'] = str(Path(path).resolve()) if path else ''
-        self.db_path = self.config['db_path']
         self._save_config()
-        
-        # PathRegistryにも登録
-        if self.registry and path:
-            try:
-                from CreateProjectList.path_constants import PathKeys
-                self.registry.register_path(PathKeys.PM_DB_PATH, self.config['db_path'])
-            except Exception as e:
-                self.logger.error(f"PathRegistry登録エラー: {e}")
     
     def get_input_folder(self) -> str:
         """入力フォルダパス取得"""
@@ -289,7 +186,8 @@ class CoreManager:
         """一時ディレクトリパス取得"""
         temp_dir = self.config.get('temp_dir', '')
         if not temp_dir:
-            temp_dir = str(Path(tempfile.gettempdir()) / "CreateProjectList")
+            from CreateProjectList.path_constants import get_default_path, PathKeys
+            temp_dir = get_default_path(PathKeys.CPL_TEMP_DIR)
             self.config['temp_dir'] = temp_dir
         
         # ディレクトリ作成
@@ -376,32 +274,6 @@ class CoreManager:
             self.logger.error(f"プロジェクト一覧取得エラー: {e}")
             return []
     
-    # === ユーティリティメソッド ===
-    
-    def normalize_path(self, path: str) -> str:
-        """パス正規化"""
-        try:
-            return str(Path(path).resolve()) if path else ""
-        except Exception:
-            return path
-    
-    def is_valid_path(self, path: str) -> bool:
-        """パス妥当性確認"""
-        try:
-            Path(path).resolve()
-            return True
-        except Exception:
-            return False
-    
-    def ensure_directory(self, path: str) -> bool:
-        """ディレクトリ存在確認・作成"""
-        try:
-            Path(path).mkdir(parents=True, exist_ok=True)
-            return True
-        except Exception as e:
-            self.logger.error(f"ディレクトリ作成エラー {path}: {e}")
-            return False
-    
     def cleanup_temp_files(self):
         """一時ファイルのクリーンアップ"""
         try:
@@ -411,172 +283,11 @@ class CoreManager:
                     if item.is_file():
                         item.unlink()
                     elif item.is_dir():
+                        import shutil
                         shutil.rmtree(item)
                 self.logger.info(f"一時ファイルをクリーンアップ: {temp_dir}")
         except Exception as e:
             self.logger.error(f"一時ファイルクリーンアップエラー: {e}")
-    
-    def get_config_info(self) -> Dict[str, Any]:
-        """設定情報取得（デバッグ用）"""
-        return {
-            'config_file': str(self.config_file),
-            'db_path': self.get_db_path(),
-            'input_folder': self.get_input_folder(),
-            'output_folder': self.get_output_folder(),
-            'temp_dir': self.get_temp_dir(),
-            'rules_count': len(self.get_replacement_rules()),
-            'last_update': self.config.get('last_update', 'Unknown')
-        }
-    
-    def validate_config(self) -> Dict[str, bool]:
-        """設定の妥当性検証"""
-        validation = {}
-        
-        try:
-            # データベースパス検証
-            db_path = self.get_db_path()
-            validation['db_path_exists'] = bool(db_path and Path(db_path).exists())
-            validation['db_connection'] = self.test_database_connection()
-            
-            # フォルダパス検証
-            input_folder = self.get_input_folder()
-            validation['input_folder_exists'] = bool(input_folder and Path(input_folder).exists())
-            
-            output_folder = self.get_output_folder()
-            validation['output_folder_valid'] = bool(output_folder and self.is_valid_path(output_folder))
-            
-            # 置換ルール検証
-            rules = self.get_replacement_rules()
-            validation['rules_valid'] = all(
-                isinstance(rule, dict) and 'search' in rule and 'replace' in rule
-                for rule in rules
-            )
-            validation['rules_count'] = len(rules)
-            
-            # 一時ディレクトリ検証
-            temp_dir = self.get_temp_dir()
-            validation['temp_dir_writable'] = self.ensure_directory(temp_dir)
-            
-        except Exception as e:
-            self.logger.error(f"設定検証エラー: {e}")
-            validation['validation_error'] = str(e)
-        
-        return validation
-    
-    def reset_to_defaults(self):
-        """設定をデフォルトにリセット"""
-        try:
-            # バックアップ作成
-            if self.config_file.exists():
-                backup_path = self.config_file.with_suffix(f'.bak_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
-                shutil.copy2(self.config_file, backup_path)
-                self.logger.info(f"設定バックアップ作成: {backup_path}")
-            
-            # デフォルト設定に戻す
-            self.config = self._get_default_config()
-            
-            # PathRegistryとの再同期
-            self._sync_with_registry()
-            
-            # 保存
-            self._save_config()
-            
-            self.logger.info("設定をデフォルトにリセットしました")
-            
-        except Exception as e:
-            self.logger.error(f"設定リセットエラー: {e}")
-            raise
-    
-    def export_config(self, export_path: str) -> bool:
-        """設定のエクスポート"""
-        try:
-            export_file = Path(export_path)
-            
-            # エクスポートデータ準備
-            export_data = {
-                'config': self.config.copy(),
-                'export_date': datetime.now().isoformat(),
-                'version': '2.0.0'
-            }
-            
-            # パスの相対化（ポータブル性向上）
-            if export_data['config'].get('db_path'):
-                export_data['config']['db_path'] = '<USER_DATA>/ProjectManager/data/projects.db'
-            if export_data['config'].get('last_input_folder'):
-                export_data['config']['last_input_folder'] = '<TEMPLATES_DIR>'
-            if export_data['config'].get('last_output_folder'):
-                export_data['config']['last_output_folder'] = '<OUTPUT_DIR>'
-            
-            # エクスポート実行
-            with open(export_file, 'w', encoding='utf-8') as f:
-                json.dump(export_data, f, ensure_ascii=False, indent=2)
-            
-            self.logger.info(f"設定をエクスポート: {export_file}")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"設定エクスポートエラー: {e}")
-            return False
-    
-    def import_config(self, import_path: str) -> bool:
-        """設定のインポート"""
-        try:
-            import_file = Path(import_path)
-            if not import_file.exists():
-                raise FileNotFoundError(f"インポートファイルが存在しません: {import_file}")
-            
-            # インポートデータ読み込み
-            with open(import_file, 'r', encoding='utf-8') as f:
-                import_data = json.load(f)
-            
-            if 'config' not in import_data:
-                raise ValueError("無効なインポートファイル形式です")
-            
-            # 現在の設定をバックアップ
-            backup_path = self.config_file.with_suffix(f'.bak_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
-            shutil.copy2(self.config_file, backup_path)
-            
-            # 設定の適用
-            imported_config = import_data['config']
-            
-            # パスの復元
-            if self.registry:
-                try:
-                    from CreateProjectList.path_constants import PathKeys
-                    
-                    if imported_config.get('db_path') == '<USER_DATA>/ProjectManager/data/projects.db':
-                        db_path = self.registry.get_path(PathKeys.PM_DB_PATH)
-                        if db_path:
-                            imported_config['db_path'] = db_path
-                    
-                    if imported_config.get('last_input_folder') == '<TEMPLATES_DIR>':
-                        templates_dir = self.registry.get_path(PathKeys.PM_TEMPLATES_DIR)
-                        if templates_dir:
-                            imported_config['last_input_folder'] = templates_dir
-                    
-                    if imported_config.get('last_output_folder') == '<OUTPUT_DIR>':
-                        output_dir = self.registry.get_path(PathKeys.OUTPUT_BASE_DIR)
-                        if output_dir:
-                            imported_config['last_output_folder'] = output_dir
-                            
-                except Exception as e:
-                    self.logger.warning(f"パス復元エラー: {e}")
-            
-            # デフォルト設定とマージ
-            default_config = self._get_default_config()
-            for key in default_config:
-                if key not in imported_config:
-                    imported_config[key] = default_config[key]
-            
-            self.config = imported_config
-            self._save_config()
-            
-            self.logger.info(f"設定をインポート: {import_file}")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"設定インポートエラー: {e}")
-            return False
     
     def __del__(self):
         """デストラクタ"""

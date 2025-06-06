@@ -1,8 +1,6 @@
 """
-アプリケーション定数とパス定義の一元管理
-KISS原則: シンプルな定数定義
-DRY原則: 重複する定数の統合
-パス管理: 全てのパスを一箇所で管理
+アプリケーション定数とパス定義の一元管理（本番環境用簡素版）
+KISS原則: 必要最小限の定数のみ
 """
 
 import sys
@@ -92,9 +90,6 @@ class ValidationConstants:
     
     # 日付形式
     DATE_FORMAT = '%Y-%m-%d'
-    
-    # ファイル拡張子
-    SUPPORTED_EXTENSIONS = ['.csv', '.xlsx', '.xlsm']
     
     # エンコーディング
     ENCODING_OPTIONS = ['utf-8', 'utf-8-sig', 'cp932']

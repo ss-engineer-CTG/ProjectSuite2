@@ -1,11 +1,10 @@
 """
 統合ドキュメント処理エンジン
-全ファイル形式の処理を統合管理
+全ファイル形式の処理を統合管理（本番環境用簡素版）
 """
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Callable, Any, Tuple
-import tempfile
 import shutil
 import re
 from datetime import datetime
@@ -56,31 +55,13 @@ class DocumentProcessor:
         # 処理状態
         self.current_project_data: Optional[Dict[str, Any]] = None
         self.is_db_connected = False
-        self.temp_dir: Optional[Path] = None
         
         # コールバック
         self._progress_callback: Optional[Callable] = None
         self._cancel_check: Optional[Callable] = None
         
-        # 初期化
-        self._initialize_temp_dir()
+        self.logger.info("DocumentProcessor初期化完了")
         
-    def _initialize_temp_dir(self):
-        """一時ディレクトリの初期化"""
-        try:
-            temp_base = self.core_manager.get_temp_dir()
-            if temp_base:
-                self.temp_dir = Path(temp_base)
-                self.temp_dir.mkdir(parents=True, exist_ok=True)
-            else:
-                self.temp_dir = Path(tempfile.mkdtemp(prefix="doc_processor_"))
-            
-            self.logger.info(f"一時ディレクトリを初期化: {self.temp_dir}")
-            
-        except Exception as e:
-            self.logger.error(f"一時ディレクトリ初期化エラー: {e}")
-            self.temp_dir = Path(tempfile.mkdtemp(prefix="doc_processor_"))
-    
     def connect_database(self) -> bool:
         """データベース接続"""
         try:
@@ -474,18 +455,6 @@ class DocumentProcessor:
     def _cleanup_temp_files(self):
         """一時ファイルのクリーンアップ"""
         try:
-            if self.temp_dir and self.temp_dir.exists():
-                for item in self.temp_dir.glob('*'):
-                    if item.is_file():
-                        item.unlink()
-                    elif item.is_dir():
-                        shutil.rmtree(item)
+            self.core_manager.cleanup_temp_files()
         except Exception as e:
             self.logger.error(f"一時ファイルクリーンアップエラー: {e}")
-    
-    def __del__(self):
-        """デストラクタ"""
-        try:
-            self._cleanup_temp_files()
-        except:
-            pass

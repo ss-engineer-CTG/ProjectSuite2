@@ -1,8 +1,6 @@
 """
-統合設定管理クラス
-Config + ConfigManager + PathRegistry の機能を統合
-KISS原則: シンプルな設定管理
-DRY原則: 設定管理機能の統合
+統合設定管理クラス（本番環境用簡素版）
+Config + ConfigManager + PathRegistry の基本機能のみ
 """
 
 import os
@@ -40,7 +38,7 @@ class UnifiedConfig:
         self.load_config()
     
     def _initialize_path_registry(self):
-        """パスレジストリの初期化"""
+        """パスレジストリの基本初期化"""
         self._path_registry = {
             'ROOT_DIR': str(PathConstants.ROOT_DIR),
             'USER_DOC_DIR': str(PathConstants.USER_DOC_DIR),
@@ -55,48 +53,11 @@ class UnifiedConfig:
             'PROJECTS_EXPORT_PATH': str(PathConstants.PROJECTS_EXPORT_PATH),
             'DEFAULTS_FILE': str(PathConstants.DEFAULTS_FILE),
             'CONFIG_FILE': str(PathConstants.CONFIG_FILE),
+            'OUTPUT_BASE_DIR': str(Path.home() / "Desktop" / "projects"),
         }
         
-        # 出力ディレクトリの動的解決
-        self._resolve_output_directory()
-    
-    def _resolve_output_directory(self):
-        """出力ディレクトリの動的解決"""
-        # カスタム出力パスの確認
-        custom_path = self._get_custom_output_path()
-        if custom_path and Path(custom_path).exists():
-            output_dir = custom_path
-        else:
-            # デフォルトパス
-            output_dir = str(Path.home() / "Desktop" / "projects")
-        
-        self._path_registry['OUTPUT_BASE_DIR'] = output_dir
-        
         # 環境変数にも設定
-        os.environ['PMSUITE_OUTPUT_DIR'] = output_dir
-    
-    def _get_custom_output_path(self) -> Optional[str]:
-        """カスタム出力パスの取得"""
-        try:
-            # defaults.txt から読み込み
-            defaults_file = Path(self._path_registry['DEFAULTS_FILE'])
-            if defaults_file.exists():
-                with open(defaults_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        if line.startswith('custom_projects_dir='):
-                            return line.split('=', 1)[1].strip()
-            
-            # config.json から読み込み
-            config_file = Path(self._path_registry['CONFIG_FILE'])
-            if config_file.exists():
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                    return config.get('paths', {}).get('output_base_dir')
-                    
-        except Exception as e:
-            self.logger.warning(f"カスタム出力パスの取得に失敗: {e}")
-        
-        return None
+        os.environ['PMSUITE_OUTPUT_DIR'] = self._path_registry['OUTPUT_BASE_DIR']
     
     def get_path(self, key: str, default: str = None) -> str:
         """パスの取得"""
@@ -210,33 +171,3 @@ default_line=L001
         """出力ディレクトリの更新"""
         self.register_path('OUTPUT_BASE_DIR', new_path)
         self.set_setting('custom_projects_dir', new_path)
-        
-        # defaults.txt にも保存
-        self._save_to_defaults('custom_projects_dir', new_path)
-    
-    def _save_to_defaults(self, key: str, value: str):
-        """defaults.txt への個別設定保存"""
-        defaults_file = Path(self.get_path('DEFAULTS_FILE'))
-        try:
-            lines = []
-            key_found = False
-            
-            if defaults_file.exists():
-                with open(defaults_file, 'r', encoding='utf-8') as f:
-                    lines = f.readlines()
-            
-            # 既存の設定を更新または追加
-            for i, line in enumerate(lines):
-                if line.startswith(f'{key}='):
-                    lines[i] = f'{key}={value}\n'
-                    key_found = True
-                    break
-            
-            if not key_found:
-                lines.append(f'{key}={value}\n')
-            
-            with open(defaults_file, 'w', encoding='utf-8') as f:
-                f.writelines(lines)
-                
-        except Exception as e:
-            self.logger.error(f"defaults.txt 保存エラー: {e}")
