@@ -86,8 +86,9 @@ class PathManager:
     @staticmethod
     def find_directories_by_name(search_paths: List[Path], 
                                 target_name: str, 
-                                max_depth: int = 4) -> List[Path]:
-        """指定名のディレクトリを複数パスから深層検索"""
+                                max_depth: int = 4,
+                                partial_match: bool = True) -> List[Path]:
+        """指定名のディレクトリを複数パスから深層検索（部分一致対応）"""
         found_directories = []
         start_time = time.time()
         searched_items = 0
@@ -107,7 +108,7 @@ class PathManager:
                 # 深度優先探索（DFS）で効率的に検索
                 found_in_path = PathManager._search_directory_recursive(
                     search_path, target_name, max_depth, 0, 
-                    start_time, searched_items
+                    start_time, searched_items, partial_match
                 )
                 
                 found_directories.extend(found_in_path)
@@ -132,7 +133,8 @@ class PathManager:
     @staticmethod
     def _search_directory_recursive(current_path: Path, target_name: str, 
                                    max_depth: int, current_depth: int,
-                                   start_time: float, searched_items: int) -> List[Path]:
+                                   start_time: float, searched_items: int,
+                                   partial_match: bool = True) -> List[Path]:
         """再帰的ディレクトリ検索"""
         found_directories = []
         
@@ -170,8 +172,8 @@ class PathManager:
                 if not item.is_dir():
                     continue
                 
-                # 対象ディレクトリ名とのマッチング
-                if item.name == target_name:
+                # 対象ディレクトリ名とのマッチング（部分一致対応）
+                if PathManager._is_target_directory_match(item.name, target_name):
                     found_directories.append(item)
                     PathManager.logger.info(f"対象ディレクトリを発見 (深度{current_depth}): {item}")
                     continue
@@ -181,7 +183,8 @@ class PathManager:
                     try:
                         sub_found = PathManager._search_directory_recursive(
                             item, target_name, max_depth, current_depth + 1,
-                            start_time, searched_items + len(found_directories)
+                            start_time, searched_items + len(found_directories),
+                            partial_match
                         )
                         found_directories.extend(sub_found)
                         
@@ -194,6 +197,31 @@ class PathManager:
         except Exception as e:
             PathManager.logger.error(f"再帰検索エラー {current_path}: {e}")
             return found_directories
+    
+    @staticmethod
+    def _is_target_directory_match(directory_name: str, target_name: str) -> bool:
+        """ディレクトリ名の一致判定（部分一致・大文字小文字不問）"""
+        try:
+            # 大文字小文字を区別しない部分一致
+            dir_name_lower = directory_name.lower()
+            target_name_lower = target_name.lower()
+            
+            # 部分一致チェック
+            if target_name_lower in dir_name_lower:
+                return True
+            
+            # より柔軟な一致パターン（アンダースコアやハイフンを無視）
+            normalized_dir = re.sub(r'[_\-\s]', '', dir_name_lower)
+            normalized_target = re.sub(r'[_\-\s]', '', target_name_lower)
+            
+            if normalized_target in normalized_dir:
+                return True
+            
+            return False
+            
+        except Exception as e:
+            PathManager.logger.error(f"ディレクトリ名一致判定エラー: {e}")
+            return False
     
     @staticmethod
     def get_standard_search_paths() -> List[Path]:
@@ -209,18 +237,25 @@ class PathManager:
     
     @staticmethod
     def find_initial_data_directory() -> Optional[Path]:
-        """初期データディレクトリの検索"""
+        """初期データディレクトリの検索（部分一致対応）"""
         try:
             search_paths = PathManager.get_standard_search_paths()
             target_name = InitializationConstants.INITIAL_DATA_FOLDER_NAME
             
             found_directories = PathManager.find_directories_by_name(
                 search_paths, target_name, 
-                max_depth=InitializationConstants.MAX_SEARCH_DEPTH
+                max_depth=InitializationConstants.MAX_SEARCH_DEPTH,
+                partial_match=True
             )
             
             # 最初に見つかったディレクトリを返す
             if found_directories:
+                PathManager.logger.info(f"初期データディレクトリを発見: {found_directories[0]}")
+                if len(found_directories) > 1:
+                    PathManager.logger.info(f"複数の候補が見つかりました:")
+                    for i, path in enumerate(found_directories, 1):
+                        PathManager.logger.info(f"  {i}. {path}")
+                
                 return found_directories[0]
             
             return None

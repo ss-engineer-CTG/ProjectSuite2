@@ -47,7 +47,7 @@ class AppConstants:
 class InitializationConstants:
     """初期化処理関連定数"""
     
-    # 初期データフォルダ名
+    # 初期データフォルダ名（部分一致で検索される）
     INITIAL_DATA_FOLDER_NAME = "initialdata_ProjectManager"
     
     # 初期化完了フラグファイル名
