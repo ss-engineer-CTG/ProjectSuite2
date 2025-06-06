@@ -26,7 +26,7 @@ class GUIManager:
         self.logger = logging.getLogger(self.__class__.__name__)
         
         # ドキュメントプロセッサ
-        from .document_processor import DocumentProcessor
+        from CreateProjectList.document_processor import DocumentProcessor
         self.processor = DocumentProcessor(core_manager)
         
         # GUI状態変数

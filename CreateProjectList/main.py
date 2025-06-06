@@ -12,12 +12,12 @@ def initialize_application():
     """アプリケーション初期化"""
     try:
         # コア管理システムの初期化
-        from .core_manager import CoreManager
+        from CreateProjectList.core_manager import CoreManager
         core_manager = CoreManager.get_instance()
         
         # 設定アダプターの適用
         try:
-            from .config_adapters_cp import adapt_create_project_list_config
+            from CreateProjectList.config_adapters_cp import adapt_create_project_list_config
             adapt_create_project_list_config()
             logging.info("設定アダプターを適用しました")
         except Exception as e:
@@ -42,7 +42,7 @@ def process_with_project_id(project_id: int) -> bool:
         # 初期化
         core_manager = initialize_application()
         
-        from .document_processor import DocumentProcessor
+        from CreateProjectList.document_processor import DocumentProcessor
         processor = DocumentProcessor(core_manager)
         
         # データベース接続とプロジェクトデータ取得
@@ -108,7 +108,7 @@ def run_gui_mode():
         
         # tkinterのインポートと初期化
         import tkinter as tk
-        from .gui_manager import GUIManager
+        from CreateProjectList.gui_manager import GUIManager
         
         # メインウィンドウの作成
         root = tk.Tk()

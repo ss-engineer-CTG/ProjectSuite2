@@ -65,7 +65,7 @@ def _register_cpl_paths(registry):
     logger = logging.getLogger(__name__)
     
     try:
-        from .path_constants import PathKeys, DEFAULT_PATHS
+        from CreateProjectList.path_constants import PathKeys, DEFAULT_PATHS
         
         # CreateProjectList固有パスをPathRegistryに登録
         cpl_paths = {
@@ -99,7 +99,7 @@ def _sync_with_project_manager(registry):
     logger = logging.getLogger(__name__)
     
     try:
-        from .path_constants import PathKeys
+        from CreateProjectList.path_constants import PathKeys
         
         # ProjectManagerから取得すべき重要パス
         pm_paths = {
@@ -135,7 +135,7 @@ def _validate_database_path(registry):
     logger = logging.getLogger(__name__)
     
     try:
-        from .path_constants import PathKeys
+        from CreateProjectList.path_constants import PathKeys
         
         # 1. PathRegistryから取得試行
         db_path = registry.get_path(PathKeys.PM_DB_PATH)
@@ -176,7 +176,7 @@ def _integrate_with_core_manager(registry):
     
     try:
         # CoreManagerインスタンスの取得
-        from .core_manager import CoreManager
+        from CreateProjectList.core_manager import CoreManager
         core_manager = CoreManager.get_instance()
         
         # PathRegistryから設定を同期
@@ -195,7 +195,7 @@ def _sync_paths_to_core_manager(registry, core_manager):
     logger = logging.getLogger(__name__)
     
     try:
-        from .path_constants import PathKeys
+        from CreateProjectList.path_constants import PathKeys
         
         # データベースパス同期
         db_path = registry.get_path(PathKeys.PM_DB_PATH)
@@ -223,7 +223,7 @@ def _sync_core_manager_to_registry(core_manager, registry):
     logger = logging.getLogger(__name__)
     
     try:
-        from .path_constants import PathKeys
+        from CreateProjectList.path_constants import PathKeys
         
         # CoreManagerで設定されているパスをPathRegistryに登録
         paths_to_sync = [
@@ -253,7 +253,7 @@ def _sync_core_manager_to_registry(core_manager, registry):
 def get_registry_status() -> Dict[str, Any]:
     """PathRegistry連携状態の取得（デバッグ用）"""
     try:
-        from .path_constants import PathKeys
+        from CreateProjectList.path_constants import PathKeys
         
         registry = _initialize_path_registry()
         if not registry:
@@ -307,7 +307,7 @@ def reset_registry_paths():
             logger.error("PathRegistryが利用できません")
             return False
         
-        from .path_constants import PathKeys
+        from CreateProjectList.path_constants import PathKeys
         
         # CreateProjectList関連パスをクリア
         cpl_keys = [
@@ -358,7 +358,7 @@ def migrate_legacy_config():
             if legacy_path.exists():
                 try:
                     # CoreManagerに移行
-                    from .core_manager import CoreManager
+                    from CreateProjectList.core_manager import CoreManager
                     core_manager = CoreManager.get_instance()
                     
                     success = core_manager.import_config(str(legacy_path))
@@ -450,7 +450,7 @@ def debug_path_resolution():
     logger = logging.getLogger(__name__)
     
     try:
-        from .path_constants import PathKeys, DEFAULT_PATHS
+        from CreateProjectList.path_constants import PathKeys, DEFAULT_PATHS
         
         registry = _initialize_path_registry()
         
@@ -487,7 +487,7 @@ def debug_path_resolution():
         
         # CoreManager状態
         try:
-            from .core_manager import CoreManager
+            from CreateProjectList.core_manager import CoreManager
             core_manager = CoreManager.get_instance()
             
             logger.info("CoreManager:")

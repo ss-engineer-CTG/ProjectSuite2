@@ -59,7 +59,7 @@ class CoreManager:
     def _initialize_path_registry(self):
         """PathRegistry初期化"""
         try:
-            from .path_constants import PathKeys
+            from CreateProjectList.path_constants import PathKeys
             
             # PathRegistryのインポート試行
             try:
@@ -96,7 +96,7 @@ class CoreManager:
         # PathRegistryから取得を試行
         if self.registry:
             try:
-                from .path_constants import PathKeys
+                from CreateProjectList.path_constants import PathKeys
                 config_path = self.registry.get_path(PathKeys.CPL_CONFIG_PATH)
                 if config_path:
                     return Path(config_path)
@@ -182,7 +182,7 @@ class CoreManager:
             return
             
         try:
-            from .path_constants import PathKeys
+            from CreateProjectList.path_constants import PathKeys
             
             # データベースパス
             db_path = self.registry.get_path(PathKeys.PM_DB_PATH)
@@ -216,7 +216,7 @@ class CoreManager:
             # ログディレクトリ
             if self.registry:
                 try:
-                    from .path_constants import PathKeys
+                    from CreateProjectList.path_constants import PathKeys
                     logs_dir = self.registry.get_path(PathKeys.LOGS_DIR)
                     if logs_dir:
                         log_dir = Path(logs_dir)
@@ -262,7 +262,7 @@ class CoreManager:
         # PathRegistryにも登録
         if self.registry and path:
             try:
-                from .path_constants import PathKeys
+                from CreateProjectList.path_constants import PathKeys
                 self.registry.register_path(PathKeys.PM_DB_PATH, self.config['db_path'])
             except Exception as e:
                 self.logger.error(f"PathRegistry登録エラー: {e}")
@@ -542,7 +542,7 @@ class CoreManager:
             # パスの復元
             if self.registry:
                 try:
-                    from .path_constants import PathKeys
+                    from CreateProjectList.path_constants import PathKeys
                     
                     if imported_config.get('db_path') == '<USER_DATA>/ProjectManager/data/projects.db':
                         db_path = self.registry.get_path(PathKeys.PM_DB_PATH)

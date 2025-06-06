@@ -19,22 +19,22 @@ __version__ = '2.0.0'
 # メインコンポーネントの遅延インポート
 def get_document_processor():
     """DocumentProcessor の遅延インポート"""
-    from .document_processor import DocumentProcessor
+    from CreateProjectList.document_processor import DocumentProcessor
     return DocumentProcessor
 
 def get_gui_manager():
     """GUIManager の遅延インポート"""
-    from .gui_manager import GUIManager
+    from CreateProjectList.gui_manager import GUIManager
     return GUIManager
 
 def get_core_manager():
     """CoreManager の遅延インポート"""
-    from .core_manager import CoreManager
+    from CreateProjectList.core_manager import CoreManager
     return CoreManager
 
 def main():
     """メイン実行関数の遅延インポート"""
-    from .main import main as main_func
+    from CreateProjectList.main import main as main_func
     return main_func()
 
 # 公開API
