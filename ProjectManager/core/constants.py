@@ -44,6 +44,47 @@ class AppConstants:
     # フィルター定義
     FILTER_OPTIONS = ["進行中", "全て"]
 
+class InitializationConstants:
+    """初期化処理関連定数"""
+    
+    # 初期データフォルダ名
+    INITIAL_DATA_FOLDER_NAME = "initialdata_ProjectManager"
+    
+    # 初期化完了フラグファイル名
+    INIT_FLAG_FILE = ".initialized"
+    
+    # 初期化状態管理ファイル名
+    INIT_STATE_FILE = "initialization_state.json"
+    
+    # 初期データ検索対象ディレクトリ
+    SEARCH_DIRECTORIES = ["Documents", "Desktop"]
+    
+    # 探索設定
+    MAX_SEARCH_DEPTH = 4  # 探索する最大深度
+    SEARCH_TIMEOUT_SECONDS = 30  # 探索のタイムアウト時間（秒）
+    MAX_SEARCH_ITEMS = 1000  # 探索する最大アイテム数（パフォーマンス制限）
+    
+    # コピー除外パターン
+    EXCLUDE_PATTERNS = [
+        "*.tmp", "*.log", "*.bak", 
+        "Thumbs.db", ".DS_Store", "desktop.ini",
+        "*.lock", "*.cache"
+    ]
+    
+    # 探索除外ディレクトリ
+    EXCLUDE_DIRECTORIES = [
+        ".git", ".svn", "node_modules", "__pycache__", 
+        ".vscode", ".idea", "bin", "obj", "target",
+        "AppData", "Application Data", "Temp", "Cache",
+        "System Volume Information", "$RECYCLE.BIN"
+    ]
+    
+    # 最大コピーサイズ（MB）
+    MAX_COPY_SIZE_MB = 500
+    
+    # 初期化試行回数の上限
+    MAX_INITIALIZATION_ATTEMPTS = 3
+
 class PathConstants:
     """パス定義の一元管理"""
     

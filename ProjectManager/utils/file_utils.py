@@ -4,11 +4,12 @@ KISS原則: シンプルなファイル操作のみ
 """
 
 import csv
+import shutil
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
-from core.constants import ValidationConstants
+from core.constants import ValidationConstants, InitializationConstants
 
 class FileManager:
     """ファイル操作の基本管理クラス"""
@@ -25,6 +26,139 @@ class FileManager:
         except Exception as e:
             FileManager.logger.error(f"ディレクトリ作成エラー {path}: {e}")
             raise
+    
+    @staticmethod
+    def copy_directory_recursive(source: Path, destination: Path, 
+                                preserve_structure: bool = True) -> Tuple[int, int]:
+        """ディレクトリの再帰的コピー（パフォーマンス最適化版）"""
+        try:
+            source = Path(source)
+            destination = Path(destination)
+            
+            if not source.exists():
+                raise FileNotFoundError(f"コピー元が存在しません: {source}")
+            
+            copied_count = 0
+            error_count = 0
+            
+            # コピー先ディレクトリの作成
+            FileManager.ensure_directory(destination)
+            
+            FileManager.logger.info(f"ディレクトリコピー開始: {source} -> {destination}")
+            
+            # ファイル・ディレクトリの一括取得（効率化）
+            all_items = []
+            try:
+                all_items = list(source.rglob('*'))
+                FileManager.logger.debug(f"コピー対象アイテム数: {len(all_items)}")
+            except Exception as e:
+                FileManager.logger.error(f"アイテム一覧取得エラー: {e}")
+                return 0, 1
+            
+            # ディレクトリ優先でソート（親ディレクトリを先に作成）
+            directories = [item for item in all_items if item.is_dir()]
+            files = [item for item in all_items if item.is_file()]
+            
+            # ディレクトリの作成
+            for directory in directories:
+                try:
+                    if FileManager._should_exclude_file(directory):
+                        continue
+                        
+                    relative_path = directory.relative_to(source)
+                    dest_dir = destination / relative_path
+                    FileManager.ensure_directory(dest_dir)
+                    
+                except Exception as e:
+                    error_count += 1
+                    FileManager.logger.error(f"ディレクトリ作成エラー {directory}: {e}")
+                    continue
+            
+            # ファイルのコピー
+            for file_item in files:
+                try:
+                    if FileManager._should_exclude_file(file_item):
+                        continue
+                    
+                    if not FileManager._check_file_size(file_item):
+                        FileManager.logger.warning(f"ファイルサイズが大きすぎます: {file_item}")
+                        error_count += 1
+                        continue
+                    
+                    relative_path = file_item.relative_to(source)
+                    dest_file = destination / relative_path
+                    
+                    # 親ディレクトリの確保
+                    FileManager.ensure_directory(dest_file.parent)
+                    
+                    # ファイルコピー
+                    shutil.copy2(file_item, dest_file)
+                    copied_count += 1
+                    
+                    if copied_count % 100 == 0:  # 進捗ログ
+                        FileManager.logger.debug(f"コピー進捗: {copied_count}ファイル完了")
+                        
+                except Exception as e:
+                    error_count += 1
+                    FileManager.logger.error(f"ファイルコピーエラー {file_item}: {e}")
+                    continue
+            
+            FileManager.logger.info(f"ディレクトリコピー完了: 成功 {copied_count}, エラー {error_count}")
+            return copied_count, error_count
+            
+        except Exception as e:
+            FileManager.logger.error(f"ディレクトリコピーエラー {source} -> {destination}: {e}")
+            raise
+    
+    @staticmethod
+    def _should_exclude_file(file_path: Path) -> bool:
+        """ファイル除外判定（強化版）"""
+        import fnmatch
+        
+        file_name = file_path.name
+        
+        # 除外パターンとのマッチング
+        for pattern in InitializationConstants.EXCLUDE_PATTERNS:
+            if fnmatch.fnmatch(file_name, pattern):
+                return True
+        
+        # 隠しファイルの除外（初期化ファイルは除く）
+        if file_name.startswith('.') and file_name not in ['.initialized']:
+            return True
+        
+        # システムディレクトリの除外
+        if file_path.is_dir():
+            dir_name_lower = file_name.lower()
+            for exclude_dir in InitializationConstants.EXCLUDE_DIRECTORIES:
+                if exclude_dir.lower() in dir_name_lower:
+                    return True
+        
+        return False
+    
+    @staticmethod
+    def _check_file_size(file_path: Path) -> bool:
+        """ファイルサイズチェック"""
+        try:
+            size_mb = file_path.stat().st_size / (1024 * 1024)
+            return size_mb <= InitializationConstants.MAX_COPY_SIZE_MB
+        except Exception:
+            return True  # サイズ取得に失敗した場合は許可
+    
+    @staticmethod
+    def get_directory_size(directory: Path) -> int:
+        """ディレクトリサイズの取得（バイト）"""
+        try:
+            total_size = 0
+            for file_path in directory.rglob('*'):
+                if file_path.is_file():
+                    try:
+                        total_size += file_path.stat().st_size
+                    except Exception:
+                        continue
+            return total_size
+        except Exception as e:
+            FileManager.logger.error(f"ディレクトリサイズ取得エラー {directory}: {e}")
+            return 0
     
     @staticmethod
     def read_csv_with_encoding(file_path: Path) -> Tuple[List[Dict[str, Any]], str]:
@@ -92,4 +226,18 @@ class FileManager:
             
         except Exception as e:
             FileManager.logger.error(f"書き込み権限確認エラー {file_path}: {e}")
+            return False
+    
+    @staticmethod
+    def safe_remove_directory(directory: Path) -> bool:
+        """安全なディレクトリ削除"""
+        try:
+            directory = Path(directory)
+            if directory.exists() and directory.is_dir():
+                shutil.rmtree(directory)
+                FileManager.logger.info(f"ディレクトリを削除: {directory}")
+                return True
+            return False
+        except Exception as e:
+            FileManager.logger.error(f"ディレクトリ削除エラー {directory}: {e}")
             return False

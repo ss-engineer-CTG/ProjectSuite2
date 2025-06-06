@@ -13,6 +13,7 @@ from core.unified_config import UnifiedConfig
 from core.database import DatabaseManager
 from ui.dashboard import DashboardGUI
 from services.project_service import ProjectService
+from services.initialization_service import InitializationService
 from utils.error_handler import ErrorHandler
 
 def setup_logging():
@@ -40,6 +41,12 @@ def setup_logging():
 def initialize_app():
     """アプリケーションの初期化"""
     try:
+        # 初期データ処理サービスの実行
+        initialization_service = InitializationService()
+        init_success = initialization_service.initialize_application_data()
+        if not init_success:
+            logging.warning("初期データ処理で問題が発生しましたが、アプリケーションを継続します")
+        
         # 統合設定の初期化
         config = UnifiedConfig()
         config.setup_directories()

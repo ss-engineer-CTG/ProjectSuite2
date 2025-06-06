@@ -6,8 +6,11 @@
 import os
 import re
 import logging
+import time
 from pathlib import Path
-from typing import Union
+from typing import Union, List, Optional
+
+from core.constants import InitializationConstants
 
 class PathManager:
     """パス操作の基本管理クラス"""
@@ -58,6 +61,173 @@ class PathManager:
         except Exception as e:
             PathManager.logger.error(f"パス検証エラー {path}: {e}")
             return False
+    
+    @staticmethod
+    def _should_exclude_directory(directory: Path) -> bool:
+        """ディレクトリ除外判定"""
+        dir_name = directory.name.lower()
+        
+        # 除外ディレクトリパターンのチェック
+        for exclude_pattern in InitializationConstants.EXCLUDE_DIRECTORIES:
+            if exclude_pattern.lower() in dir_name:
+                return True
+        
+        # システムディレクトリの除外
+        if dir_name.startswith('.') and dir_name not in ['.']:
+            return True
+        
+        # アクセス権限のチェック
+        try:
+            list(directory.iterdir())
+            return False
+        except (PermissionError, OSError):
+            return True
+    
+    @staticmethod
+    def find_directories_by_name(search_paths: List[Path], 
+                                target_name: str, 
+                                max_depth: int = 4) -> List[Path]:
+        """指定名のディレクトリを複数パスから深層検索"""
+        found_directories = []
+        start_time = time.time()
+        searched_items = 0
+        
+        try:
+            for search_path in search_paths:
+                if not search_path.exists():
+                    continue
+                
+                PathManager.logger.debug(f"ディレクトリ検索開始: {search_path} (最大深度: {max_depth})")
+                
+                # タイムアウトチェック
+                if time.time() - start_time > InitializationConstants.SEARCH_TIMEOUT_SECONDS:
+                    PathManager.logger.warning("検索タイムアウトが発生しました")
+                    break
+                
+                # 深度優先探索（DFS）で効率的に検索
+                found_in_path = PathManager._search_directory_recursive(
+                    search_path, target_name, max_depth, 0, 
+                    start_time, searched_items
+                )
+                
+                found_directories.extend(found_in_path)
+                
+                # アイテム数制限チェック
+                searched_items += len(found_in_path)
+                if searched_items >= InitializationConstants.MAX_SEARCH_ITEMS:
+                    PathManager.logger.warning("検索アイテム数制限に到達しました")
+                    break
+            
+            if found_directories:
+                PathManager.logger.info(f"検索完了: {len(found_directories)}個のディレクトリを発見")
+            else:
+                PathManager.logger.info("検索完了: 対象ディレクトリが見つかりませんでした")
+            
+            return found_directories
+            
+        except Exception as e:
+            PathManager.logger.error(f"ディレクトリ検索エラー: {e}")
+            return found_directories
+    
+    @staticmethod
+    def _search_directory_recursive(current_path: Path, target_name: str, 
+                                   max_depth: int, current_depth: int,
+                                   start_time: float, searched_items: int) -> List[Path]:
+        """再帰的ディレクトリ検索"""
+        found_directories = []
+        
+        try:
+            # タイムアウトチェック
+            if time.time() - start_time > InitializationConstants.SEARCH_TIMEOUT_SECONDS:
+                return found_directories
+            
+            # アイテム数制限チェック
+            if searched_items >= InitializationConstants.MAX_SEARCH_ITEMS:
+                return found_directories
+            
+            # 深度制限チェック
+            if current_depth >= max_depth:
+                return found_directories
+            
+            # 除外ディレクトリチェック
+            if PathManager._should_exclude_directory(current_path):
+                return found_directories
+            
+            PathManager.logger.debug(f"検索中 (深度{current_depth}): {current_path}")
+            
+            # 現在のディレクトリの内容を取得
+            try:
+                items = list(current_path.iterdir())
+            except (PermissionError, OSError) as e:
+                PathManager.logger.debug(f"アクセス権限エラー: {current_path} - {e}")
+                return found_directories
+            
+            for item in items:
+                # タイムアウトチェック
+                if time.time() - start_time > InitializationConstants.SEARCH_TIMEOUT_SECONDS:
+                    break
+                
+                if not item.is_dir():
+                    continue
+                
+                # 対象ディレクトリ名とのマッチング
+                if item.name == target_name:
+                    found_directories.append(item)
+                    PathManager.logger.info(f"対象ディレクトリを発見 (深度{current_depth}): {item}")
+                    continue
+                
+                # 再帰検索（さらに深い階層）
+                if current_depth < max_depth - 1:
+                    try:
+                        sub_found = PathManager._search_directory_recursive(
+                            item, target_name, max_depth, current_depth + 1,
+                            start_time, searched_items + len(found_directories)
+                        )
+                        found_directories.extend(sub_found)
+                        
+                    except Exception as e:
+                        PathManager.logger.debug(f"再帰検索エラー {item}: {e}")
+                        continue
+            
+            return found_directories
+            
+        except Exception as e:
+            PathManager.logger.error(f"再帰検索エラー {current_path}: {e}")
+            return found_directories
+    
+    @staticmethod
+    def get_standard_search_paths() -> List[Path]:
+        """標準的な検索パスの取得"""
+        search_paths = []
+        
+        for directory in InitializationConstants.SEARCH_DIRECTORIES:
+            path = Path.home() / directory
+            if path.exists():
+                search_paths.append(path)
+        
+        return search_paths
+    
+    @staticmethod
+    def find_initial_data_directory() -> Optional[Path]:
+        """初期データディレクトリの検索"""
+        try:
+            search_paths = PathManager.get_standard_search_paths()
+            target_name = InitializationConstants.INITIAL_DATA_FOLDER_NAME
+            
+            found_directories = PathManager.find_directories_by_name(
+                search_paths, target_name, 
+                max_depth=InitializationConstants.MAX_SEARCH_DEPTH
+            )
+            
+            # 最初に見つかったディレクトリを返す
+            if found_directories:
+                return found_directories[0]
+            
+            return None
+            
+        except Exception as e:
+            PathManager.logger.error(f"初期データディレクトリ検索エラー: {e}")
+            return None
     
     @staticmethod
     def sanitize_path_component(component: str) -> str:
@@ -153,3 +323,29 @@ class PathManager:
                 break
         
         return target_path
+    
+    @staticmethod
+    def copy_directory_structure(source: Path, destination: Path, 
+                                copy_files: bool = False) -> bool:
+        """ディレクトリ構造のコピー"""
+        try:
+            from utils.file_utils import FileManager
+            
+            if copy_files:
+                copied_count, error_count = FileManager.copy_directory_recursive(
+                    source, destination
+                )
+                return copied_count > 0
+            else:
+                # ディレクトリ構造のみコピー
+                for item in source.rglob('*'):
+                    if item.is_dir():
+                        relative_path = item.relative_to(source)
+                        dest_dir = destination / relative_path
+                        FileManager.ensure_directory(dest_dir)
+                
+                return True
+                
+        except Exception as e:
+            PathManager.logger.error(f"ディレクトリ構造コピーエラー {source} -> {destination}: {e}")
+            return False

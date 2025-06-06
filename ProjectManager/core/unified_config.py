@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from .constants import AppConstants, PathConstants
+from .constants import AppConstants, PathConstants, InitializationConstants
 
 class UnifiedConfig:
     """統合設定管理クラス"""
@@ -56,8 +56,31 @@ class UnifiedConfig:
             'OUTPUT_BASE_DIR': str(Path.home() / "Desktop" / "projects"),
         }
         
+        # 初期データ関連パスの追加
+        self._add_initialization_paths()
+        
         # 環境変数にも設定
         os.environ['PMSUITE_OUTPUT_DIR'] = self._path_registry['OUTPUT_BASE_DIR']
+    
+    def _add_initialization_paths(self):
+        """初期データ関連パスの追加"""
+        # 初期データ検索パス
+        for i, directory in enumerate(InitializationConstants.SEARCH_DIRECTORIES):
+            path = Path.home() / directory
+            self._path_registry[f'SEARCH_PATH_{i}'] = str(path)
+        
+        # 初期データフォルダの候補パス
+        self._path_registry['INITIAL_DATA_DOCUMENTS'] = str(
+            Path.home() / "Documents" / InitializationConstants.INITIAL_DATA_FOLDER_NAME
+        )
+        self._path_registry['INITIAL_DATA_DESKTOP'] = str(
+            Path.home() / "Desktop" / InitializationConstants.INITIAL_DATA_FOLDER_NAME
+        )
+        
+        # 初期化フラグファイルパス
+        self._path_registry['INIT_FLAG_PATH'] = str(
+            PathConstants.DATA_DIR / InitializationConstants.INIT_FLAG_FILE
+        )
     
     def get_path(self, key: str, default: str = None) -> str:
         """パスの取得"""
@@ -72,6 +95,15 @@ class UnifiedConfig:
             os.environ['PMSUITE_OUTPUT_DIR'] = path
         elif key == 'DB_PATH':
             os.environ['PMSUITE_DB_PATH'] = path
+    
+    def get_initialization_paths(self) -> Dict[str, str]:
+        """初期化関連パスの取得"""
+        return {
+            'search_documents': self.get_path('INITIAL_DATA_DOCUMENTS'),
+            'search_desktop': self.get_path('INITIAL_DATA_DESKTOP'),
+            'data_directory': self.get_path('DATA_DIR'),
+            'init_flag': self.get_path('INIT_FLAG_PATH')
+        }
     
     def setup_directories(self):
         """必要なディレクトリの作成"""
