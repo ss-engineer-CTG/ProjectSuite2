@@ -1,7 +1,5 @@
 """
-最適化されたデータベース操作クラス
-KISS原則: シンプルなCRUD操作
-DRY原則: 重複するSQL処理の統合
+統合データベース操作
 """
 
 import sqlite3
@@ -10,12 +8,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
-from .constants import AppConstants
-
 class DatabaseManager:
     """統合データベース管理クラス"""
     
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: str):
         self.db_path = Path(db_path)
         self.logger = logging.getLogger(__name__)
         self.setup_database()
@@ -29,16 +25,46 @@ class DatabaseManager:
     def setup_database(self):
         """データベースの初期設定"""
         try:
-            # データベースファイルのディレクトリを作成
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 
-                # テーブルの作成
-                self._create_projects_table(cursor)
-                self._create_tasks_table(cursor)
-                self._create_dashboard_table(cursor)
+                # プロジェクトテーブル
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS projects (
+                        project_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_name TEXT NOT NULL UNIQUE,
+                        start_date TEXT NOT NULL,
+                        manager TEXT NOT NULL,
+                        reviewer TEXT NOT NULL,
+                        approver TEXT NOT NULL,
+                        division TEXT,
+                        factory TEXT,
+                        process TEXT,
+                        line TEXT,
+                        status TEXT NOT NULL DEFAULT '進行中' CHECK(status IN ('進行中', '完了', '中止')),
+                        project_path TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                ''')
+                
+                # タスクテーブル
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS tasks (
+                        task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        task_name TEXT NOT NULL,
+                        task_start_date TEXT NOT NULL,
+                        task_finish_date TEXT NOT NULL,
+                        task_status TEXT NOT NULL CHECK(task_status IN ('未着手', '進行中', '完了', '中止')),
+                        task_milestone TEXT NOT NULL,
+                        task_assignee TEXT,
+                        task_work_hours REAL,
+                        project_name TEXT NOT NULL,
+                        FOREIGN KEY (project_name) REFERENCES projects(project_name)
+                    )
+                ''')
                 
                 conn.commit()
                 self.logger.info("データベースの初期設定が完了しました")
@@ -47,72 +73,7 @@ class DatabaseManager:
             self.logger.error(f"データベース設定エラー: {e}")
             raise
     
-    def _create_projects_table(self, cursor):
-        """プロジェクトテーブルの作成"""
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS projects (
-                project_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_name TEXT NOT NULL UNIQUE,
-                start_date TEXT NOT NULL,
-                manager TEXT NOT NULL,
-                reviewer TEXT NOT NULL,
-                approver TEXT NOT NULL,
-                division TEXT,
-                factory TEXT,
-                process TEXT,
-                line TEXT,
-                status TEXT NOT NULL DEFAULT '進行中' CHECK(status IN ('進行中', '完了', '中止')),
-                project_path TEXT,
-                ganttchart_path TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-        ''')
-    
-    def _create_tasks_table(self, cursor):
-        """タスクテーブルの作成"""
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS tasks (
-                task_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                task_name TEXT NOT NULL,
-                task_start_date TEXT NOT NULL,
-                task_finish_date TEXT NOT NULL,
-                task_status TEXT NOT NULL CHECK(task_status IN ('未着手', '進行中', '完了', '中止')),
-                task_milestone TEXT NOT NULL,
-                task_assignee TEXT,
-                task_work_hours REAL,
-                project_name TEXT NOT NULL,
-                FOREIGN KEY (project_name) REFERENCES projects(project_name)
-                    ON UPDATE CASCADE
-                    ON DELETE CASCADE
-            )
-        ''')
-    
-    def _create_dashboard_table(self, cursor):
-        """ダッシュボードテーブルの作成"""
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS dashboard (
-                project_id INTEGER,
-                project_name TEXT,
-                manager TEXT,
-                division TEXT,
-                factory TEXT,
-                process TEXT,
-                line TEXT,
-                status TEXT,
-                created_at TEXT,
-                task_id INTEGER,
-                task_name TEXT,
-                task_start_date TEXT,
-                task_finish_date TEXT,
-                task_status TEXT,
-                task_milestone TEXT,
-                task_assignee TEXT,
-                task_work_hours REAL
-            )
-        ''')
-    
-    # プロジェクトCRUD操作
+    # プロジェクト操作
     def create_project(self, project_data: Dict[str, Any]) -> int:
         """プロジェクトの作成"""
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -143,11 +104,9 @@ class DatabaseManager:
                 
                 project_id = cursor.lastrowid
                 conn.commit()
-                self.logger.info(f"プロジェクトを作成しました: {project_data['project_name']}")
                 return project_id
                 
-        except sqlite3.IntegrityError as e:
-            self.logger.error(f"プロジェクト作成エラー（重複）: {e}")
+        except sqlite3.IntegrityError:
             raise ValueError("同名のプロジェクトが既に存在します")
         except Exception as e:
             self.logger.error(f"プロジェクト作成エラー: {e}")
@@ -161,19 +120,20 @@ class DatabaseManager:
                 cursor.execute('SELECT * FROM projects WHERE project_id = ?', (project_id,))
                 row = cursor.fetchone()
                 return dict(row) if row else None
-                
         except Exception as e:
             self.logger.error(f"プロジェクト取得エラー: {e}")
             return None
     
-    def get_all_projects(self) -> List[Dict[str, Any]]:
+    def get_all_projects(self, status_filter: str = None) -> List[Dict[str, Any]]:
         """全プロジェクトの取得"""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute('SELECT * FROM projects ORDER BY project_id DESC')
+                if status_filter and status_filter != "全て":
+                    cursor.execute('SELECT * FROM projects WHERE status = ? ORDER BY project_id DESC', (status_filter,))
+                else:
+                    cursor.execute('SELECT * FROM projects ORDER BY project_id DESC')
                 return [dict(row) for row in cursor.fetchall()]
-                
         except Exception as e:
             self.logger.error(f"プロジェクト一覧取得エラー: {e}")
             return []
@@ -206,10 +166,7 @@ class DatabaseManager:
                     current_time,
                     project_id
                 ))
-                
                 conn.commit()
-                self.logger.info(f"プロジェクトを更新しました: ID {project_id}")
-                
         except Exception as e:
             self.logger.error(f"プロジェクト更新エラー: {e}")
             raise
@@ -221,8 +178,6 @@ class DatabaseManager:
                 cursor = conn.cursor()
                 cursor.execute('DELETE FROM projects WHERE project_id = ?', (project_id,))
                 conn.commit()
-                self.logger.info(f"プロジェクトを削除しました: ID {project_id}")
-                
         except Exception as e:
             self.logger.error(f"プロジェクト削除エラー: {e}")
             raise
@@ -237,7 +192,6 @@ class DatabaseManager:
                     (project_path, project_id)
                 )
                 conn.commit()
-                
         except Exception as e:
             self.logger.error(f"プロジェクトパス更新エラー: {e}")
             raise
@@ -250,8 +204,6 @@ class DatabaseManager:
                 cursor = conn.cursor()
                 cursor.execute('DELETE FROM tasks')
                 conn.commit()
-                self.logger.info("全タスクをクリアしました")
-                
         except Exception as e:
             self.logger.error(f"タスククリアエラー: {e}")
             raise
@@ -285,30 +237,16 @@ class DatabaseManager:
                 ''', task_values)
                 
                 conn.commit()
-                self.logger.info(f"{len(tasks_data)}件のタスクを登録しました")
-                
         except Exception as e:
             self.logger.error(f"タスク一括挿入エラー: {e}")
             raise
     
-    # ダッシュボード更新
-    def update_dashboard(self):
-        """ダッシュボードテーブルの更新"""
+    def get_dashboard_data(self) -> List[Dict[str, Any]]:
+        """ダッシュボードデータの取得"""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                
-                # 既存データのクリア
-                cursor.execute('DELETE FROM dashboard')
-                
-                # プロジェクトとタスクの結合データを挿入
                 cursor.execute('''
-                    INSERT INTO dashboard (
-                        project_id, project_name, manager, division, factory,
-                        process, line, status, created_at, task_id, task_name,
-                        task_start_date, task_finish_date, task_status, 
-                        task_milestone, task_assignee, task_work_hours
-                    )
                     SELECT 
                         p.project_id, p.project_name, p.manager, p.division, 
                         p.factory, p.process, p.line, p.status, p.created_at,
@@ -317,11 +255,9 @@ class DatabaseManager:
                         t.task_assignee, t.task_work_hours
                     FROM projects p
                     LEFT JOIN tasks t ON p.project_name = t.project_name
+                    ORDER BY p.project_id, t.task_id
                 ''')
-                
-                conn.commit()
-                self.logger.info("ダッシュボードテーブルを更新しました")
-                
+                return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
-            self.logger.error(f"ダッシュボード更新エラー: {e}")
-            raise
+            self.logger.error(f"ダッシュボードデータ取得エラー: {e}")
+            return []

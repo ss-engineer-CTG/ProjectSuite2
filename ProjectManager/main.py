@@ -1,32 +1,27 @@
 """
-ProjectManager 最適化版メインエントリーポイント
-統合設定管理とシンプルな起動処理
+ProjectManager 軽量化版メインエントリーポイント
 """
 
 import sys
 import logging
 from pathlib import Path
 
-# 最適化されたコアモジュールをインポート
-from core.constants import AppConstants
-from core.unified_config import UnifiedConfig
-from core.database import DatabaseManager
-from ui.dashboard import DashboardGUI
-from services.project_service import ProjectService
-from services.initialization_service import InitializationService
-from utils.error_handler import ErrorHandler
+from config import Config
+from database import DatabaseManager
+from services import ProjectService, TaskService, ExportService, InitializationService
+from ui.main_window import MainWindow
+from utils import ErrorHandler
 
 def setup_logging():
     """ログシステムの初期化"""
     try:
-        # UnifiedConfigのインスタンスを作成
-        config = UnifiedConfig()
-        log_dir = Path(config.get_path('LOGS_DIR'))
+        config = Config()
+        log_dir = Path(config.get_path('logs'))
         log_dir.mkdir(parents=True, exist_ok=True)
         
         logging.basicConfig(
             level=logging.INFO,
-            format=AppConstants.LOG_FORMAT,
+            format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.FileHandler(log_dir / 'app.log', encoding='utf-8'),
                 logging.StreamHandler(sys.stdout)
@@ -41,28 +36,28 @@ def setup_logging():
 def initialize_app():
     """アプリケーションの初期化"""
     try:
-        # 初期データ処理サービスの実行
-        initialization_service = InitializationService()
-        init_success = initialization_service.initialize_application_data()
-        if not init_success:
-            logging.warning("初期データ処理で問題が発生しましたが、アプリケーションを継続します")
-        
-        # 統合設定の初期化
-        config = UnifiedConfig()
+        # 設定の初期化
+        config = Config()
         config.setup_directories()
         
-        # データベースの初期化
-        db_manager = DatabaseManager(config.get_path('DB_PATH'))
+        # 初期化サービスの実行
+        init_service = InitializationService(config)
+        init_service.initialize_if_needed()
         
-        # プロジェクトサービスの初期化
-        project_service = ProjectService(db_manager)
+        # データベースの初期化
+        db_manager = DatabaseManager(config.get_path('database'))
+        
+        # サービスの初期化
+        project_service = ProjectService(db_manager, config)
+        task_service = TaskService(db_manager, config)
+        export_service = ExportService(db_manager, config)
         
         logging.info("アプリケーションの初期化が完了しました")
-        return db_manager, project_service
+        return config, db_manager, project_service, task_service, export_service
         
     except Exception as e:
-        ErrorHandler.handle_critical_error(e, "アプリケーション初期化エラー")
-        return None, None
+        ErrorHandler.handle_critical_error(e, "アプリケーション初期化")
+        return None, None, None, None, None
 
 def main():
     """メイン実行関数"""
@@ -71,18 +66,18 @@ def main():
         setup_logging()
         
         # アプリケーション初期化
-        db_manager, project_service = initialize_app()
+        config, db_manager, project_service, task_service, export_service = initialize_app()
         if not db_manager:
             return
         
         # GUI起動
-        app = DashboardGUI(db_manager, project_service)
+        app = MainWindow(config, project_service, task_service, export_service)
         app.run()
         
     except KeyboardInterrupt:
         logging.info("ユーザーによる中断")
     except Exception as e:
-        ErrorHandler.handle_critical_error(e, "アプリケーション実行エラー")
+        ErrorHandler.handle_critical_error(e, "アプリケーション実行")
     finally:
         logging.info("アプリケーションを終了します")
 
