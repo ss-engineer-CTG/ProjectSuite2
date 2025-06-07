@@ -76,6 +76,9 @@ class UnifiedConfig:
         self._path_registry['INITIAL_DATA_DESKTOP'] = str(
             Path.home() / "Desktop" / InitializationConstants.INITIAL_DATA_FOLDER_NAME
         )
+        self._path_registry['INITIAL_DATA_DOWNLOADS'] = str(
+            Path.home() / "Downloads" / InitializationConstants.INITIAL_DATA_FOLDER_NAME
+        )
         
         # 初期化フラグファイルパス
         self._path_registry['INIT_FLAG_PATH'] = str(
@@ -101,6 +104,7 @@ class UnifiedConfig:
         return {
             'search_documents': self.get_path('INITIAL_DATA_DOCUMENTS'),
             'search_desktop': self.get_path('INITIAL_DATA_DESKTOP'),
+            'search_downloads': self.get_path('INITIAL_DATA_DOWNLOADS'),
             'data_directory': self.get_path('DATA_DIR'),
             'init_flag': self.get_path('INIT_FLAG_PATH')
         }

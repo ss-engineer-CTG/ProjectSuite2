@@ -57,7 +57,7 @@ class InitializationConstants:
     INIT_STATE_FILE = "initialization_state.json"
     
     # 初期データ検索対象ディレクトリ
-    SEARCH_DIRECTORIES = ["Documents", "Desktop"]
+    SEARCH_DIRECTORIES = ["Documents", "Desktop", "Downloads"]
     
     # 探索設定
     MAX_SEARCH_DEPTH = 4  # 探索する最大深度

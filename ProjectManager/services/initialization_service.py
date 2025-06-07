@@ -175,7 +175,7 @@ class InitializationService:
             return None
     
     def _copy_initial_data(self, source_path: Path) -> bool:
-        """初期データのコピー"""
+        """初期データのコピー（projectsフォルダは特別処理）"""
         try:
             destination_path = Path(self.config.get_path('DATA_DIR'))
             
@@ -190,19 +190,123 @@ class InitializationService:
             
             self.logger.info(f"初期データをコピー中: {source_path} -> {destination_path}")
             
-            # ディレクトリの再帰的コピー
-            copied_count, error_count = FileManager.copy_directory_recursive(
-                source_path, destination_path, preserve_structure=True
-            )
+            # projectsフォルダの特別処理
+            projects_folder = source_path / "projects"
+            projects_copied = False
             
-            self.logger.info(f"初期データコピー完了: 成功 {copied_count}, エラー {error_count}")
+            if projects_folder.exists() and projects_folder.is_dir():
+                projects_copied = self._copy_projects_folder_to_desktop(projects_folder)
+                if projects_copied:
+                    self.logger.info("projectsフォルダをデスクトップにコピーしました")
+                else:
+                    self.logger.warning("projectsフォルダのデスクトップコピーに失敗しました")
+            
+            # その他のファイル・フォルダのコピー（projectsフォルダを除く）
+            copied_count, error_count = self._copy_other_files(source_path, destination_path, exclude_folders=["projects"])
+            
+            self.logger.info(f"初期データコピー完了: 成功 {copied_count}, エラー {error_count}, projectsフォルダコピー {projects_copied}")
             
             # ある程度成功していれば継続
-            return copied_count > 0
+            return copied_count > 0 or projects_copied
             
         except Exception as e:
             ErrorHandler.handle_error(e, "初期データコピー", show_dialog=False)
             return False
+    
+    def _copy_projects_folder_to_desktop(self, projects_folder: Path) -> bool:
+        """projectsフォルダをデスクトップにコピー"""
+        try:
+            # デスクトップパスの取得
+            desktop_path = Path.home() / "Desktop"
+            if not desktop_path.exists():
+                self.logger.warning(f"デスクトップフォルダが見つかりません: {desktop_path}")
+                return False
+            
+            # コピー先パスの決定（一意な名前を確保）
+            destination_projects = PathManager.ensure_unique_path(desktop_path, "projects")
+            
+            self.logger.info(f"projectsフォルダをデスクトップにコピー: {projects_folder} -> {destination_projects}")
+            
+            # ディレクトリの再帰的コピー
+            copied_count, error_count = FileManager.copy_directory_recursive(
+                projects_folder, destination_projects, preserve_structure=True
+            )
+            
+            if copied_count > 0:
+                # 設定にデスクトップのprojectsパスを保存
+                self.config.set_setting('desktop_projects_path', str(destination_projects))
+                self.config.register_path('OUTPUT_BASE_DIR', str(destination_projects))
+                
+                self.logger.info(f"projectsフォルダのデスクトップコピー完了: {destination_projects}")
+                return True
+            else:
+                self.logger.error(f"projectsフォルダのコピーに失敗: コピーファイル数 0")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"projectsフォルダのデスクトップコピーエラー: {e}")
+            return False
+    
+    def _copy_other_files(self, source_path: Path, destination_path: Path, exclude_folders: List[str] = None) -> tuple:
+        """指定フォルダを除外してその他のファイル・フォルダをコピー"""
+        try:
+            if exclude_folders is None:
+                exclude_folders = []
+            
+            copied_count = 0
+            error_count = 0
+            
+            # 除外フォルダ名の正規化（大文字小文字を区別しない）
+            exclude_folders_lower = [folder.lower() for folder in exclude_folders]
+            
+            # ソースディレクトリの直下アイテムを処理
+            for item in source_path.iterdir():
+                try:
+                    # 除外対象かチェック
+                    if item.is_dir() and item.name.lower() in exclude_folders_lower:
+                        self.logger.debug(f"フォルダを除外: {item.name}")
+                        continue
+                    
+                    # 除外パターンのチェック
+                    if FileManager._should_exclude_file(item):
+                        continue
+                    
+                    # コピー先パスの決定
+                    relative_path = item.relative_to(source_path)
+                    dest_item = destination_path / relative_path
+                    
+                    if item.is_file():
+                        # ファイルサイズチェック
+                        if not FileManager._check_file_size(item):
+                            self.logger.warning(f"ファイルサイズが大きすぎます: {item}")
+                            error_count += 1
+                            continue
+                        
+                        # 親ディレクトリの確保
+                        FileManager.ensure_directory(dest_item.parent)
+                        
+                        # ファイルコピー
+                        shutil.copy2(item, dest_item)
+                        copied_count += 1
+                        
+                    elif item.is_dir():
+                        # ディレクトリの再帰的コピー
+                        sub_copied, sub_errors = FileManager.copy_directory_recursive(
+                            item, dest_item, preserve_structure=True
+                        )
+                        copied_count += sub_copied
+                        error_count += sub_errors
+                    
+                except Exception as e:
+                    error_count += 1
+                    self.logger.error(f"アイテムコピーエラー {item}: {e}")
+                    continue
+            
+            return copied_count, error_count
+            
+        except Exception as e:
+            self.logger.error(f"その他ファイルコピーエラー: {e}")
+            return 0, 1
     
     def reset_initialization(self) -> bool:
         """初期化状態のリセット（開発・テスト用）"""
@@ -248,6 +352,12 @@ class InitializationService:
             status['initial_data_currently_available'] = current_initial_data is not None
             if current_initial_data:
                 status['current_initial_data_path'] = str(current_initial_data)
+            
+            # デスクトップprojectsフォルダの状態
+            desktop_projects_path = self.config.get_setting('desktop_projects_path')
+            if desktop_projects_path:
+                status['desktop_projects_path'] = desktop_projects_path
+                status['desktop_projects_exists'] = Path(desktop_projects_path).exists()
             
             return status
             
